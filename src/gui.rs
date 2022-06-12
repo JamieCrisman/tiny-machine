@@ -1,11 +1,10 @@
 use pixels::{wgpu, PixelsContext};
 use std::{
     collections::HashMap,
-    hash::Hash,
     time::{Duration, Instant},
 };
-use winit::event::{KeyboardInput, VirtualKeyCode};
-use winit_input_helper::WinitInputHelper;
+
+
 
 use crate::Stats;
 

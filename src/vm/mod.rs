@@ -37,15 +37,14 @@ pub struct VM {
 impl VM {
     pub fn flash(bytecode: Bytecode, screen_size: usize, debug: bool) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
-        let mut globals = Vec::with_capacity(9999);
-        globals.resize(9999, 0);
+        let globals = vec![0; 9999];
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
         Self {
             op_counts: HashMap::new(),
             time_per_op: HashMap::new(),
             screen: vec![0; screen_size],
-            frames: frames,
+            frames,
             frames_index: 1,
             stack: Vec::with_capacity(9999),
             constants: bytecode.constants,
@@ -165,7 +164,7 @@ impl VM {
             Opcode::Increment => {
                 // println!("accumulate!");
                 self.accumulator = self.accumulator.wrapping_add(1);
-                self.accumulator = self.accumulator % self.screen.capacity() as u16;
+                self.accumulator %= self.screen.capacity() as u16;
                 1
             }
             Opcode::Decrement => {
@@ -249,7 +248,7 @@ impl VM {
                 Some(v) => v + 1,
                 None => 1,
             };
-            self.op_counts.insert(op.clone(), count);
+            self.op_counts.insert(op, count);
         }
         Ok(result)
     }

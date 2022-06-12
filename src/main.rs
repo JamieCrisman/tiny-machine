@@ -8,10 +8,7 @@ use game_loop::{game_loop, Time, TimeTrait};
 use pixels::{Error, Pixels, SurfaceTexture};
 use vm::VM;
 use winit::{
-    dpi::LogicalSize,
-    event::VirtualKeyCode,
-    event_loop::EventLoop,
-    window::{Window, WindowBuilder},
+    dpi::LogicalSize, event::VirtualKeyCode, event_loop::EventLoop, window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
 
@@ -204,7 +201,7 @@ fn main() -> Result<(), Error> {
         constants: vec![255, 0],
     };
 
-    let mut gui = Gui::new(&window, &pixels);
+    let gui = Gui::new(&window, &pixels);
 
     let machine = Machine::new(pixels, bc, gui, debug);
 
@@ -243,7 +240,7 @@ fn main() -> Result<(), Error> {
             );
         },
         move |g| {
-            let render_time = Instant::now();
+            let _render_time = Instant::now();
             g.game.gui.prepare(&g.window).expect("gui.prepare() failed");
 
             // Drawing
@@ -286,7 +283,7 @@ fn main() -> Result<(), Error> {
         },
         |g, event| {
             // Let winit_input_helper collect events to build its state.
-            g.game.gui.handle_event(&g.window, &event);
+            g.game.gui.handle_event(&g.window, event);
 
             if g.game.input.update(event) {
                 // Update controls
