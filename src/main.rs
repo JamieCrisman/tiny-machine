@@ -1,12 +1,22 @@
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    env,
+    time::{Duration, Instant},
+};
 
 use game_loop::{game_loop, Time, TimeTrait};
 use pixels::{Error, Pixels, SurfaceTexture};
 use vm::VM;
 use winit::{
-    dpi::LogicalSize, event::VirtualKeyCode, event_loop::EventLoop, window::WindowBuilder,
+    dpi::LogicalSize,
+    event::VirtualKeyCode,
+    event_loop::EventLoop,
+    window::{Window, WindowBuilder},
 };
 use winit_input_helper::WinitInputHelper;
+
+mod gui;
+use crate::gui::Gui;
 
 mod compiler;
 mod vm;
@@ -21,6 +31,20 @@ const TIME_STEP: Duration = Duration::from_nanos(1_000_000_000 / FRAME_RATE as u
 // const HEIGHT: i32 = 240;
 const WIDTH: i32 = 160;
 const HEIGHT: i32 = 144;
+
+#[derive(Clone)]
+struct Stats {
+    process_time: Duration,
+    process_time_list: Vec<f32>,
+    cycles: u64,
+    stack_size: usize,
+    // stack_length: usize,
+    globals_size: usize,
+    // globals_length: usize,
+    ip: i64,
+    sp: usize,
+    op_times: HashMap<String, Duration>,
+}
 
 struct Machine {
     /// Software renderer.
@@ -38,19 +62,20 @@ struct Machine {
     /// Game pause state.
     // paused: bool,
     vm: VM,
+    gui: gui::Gui,
 }
 
 impl Machine {
-    fn new(mut pixels: Pixels, bc: compiler::Bytecode) -> Self {
-        let vm = VM::flash(bc, pixels.get_frame().len() / 4);
+    fn new(mut pixels: Pixels, bc: compiler::Bytecode, gui: gui::Gui, debug: bool) -> Self {
+        let vm = VM::flash(bc, pixels.get_frame().len() / 4, debug);
         Self {
             pixels,
-            // world: World::new(generate_seed(), debug),
             // controls: Controls::default(),
             input: WinitInputHelper::new(),
             // gilrs: Gilrs::new().unwrap(), // XXX: Don't unwrap.
             // gamepad: None,
             vm,
+            gui,
         }
     }
 
@@ -111,14 +136,14 @@ fn main() -> Result<(), Error> {
     env_logger::init();
     let event_loop = EventLoop::new();
     // Enable debug mode with `DEBUG=true` environment variable
-    // let debug = env::var("DEBUG")
-    //     .unwrap_or_else(|_| "false".to_string())
-    //     .parse()
-    //     .unwrap_or(false);
+    let debug = env::var("DEBUG")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse()
+        .unwrap_or(false);
 
     let window = {
         let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
-        let scaled_size = LogicalSize::new(WIDTH as f64 * 3.0, HEIGHT as f64 * 3.0);
+        let scaled_size = LogicalSize::new(WIDTH as f64 * 4.0, HEIGHT as f64 * 4.0);
         WindowBuilder::new()
             .with_title("VM")
             .with_inner_size(scaled_size)
@@ -179,7 +204,9 @@ fn main() -> Result<(), Error> {
         constants: vec![255, 0],
     };
 
-    let machine = Machine::new(pixels, bc);
+    let mut gui = Gui::new(&window, &pixels);
+
+    let machine = Machine::new(pixels, bc, gui, debug);
 
     game_loop(
         event_loop,
@@ -193,7 +220,10 @@ fn main() -> Result<(), Error> {
             //     g.game.world.update(&g.game.controls);
             // }
             let mut emulated_cycles: u64 = 0;
-            while emulated_cycles <= CYCLES_PER_FRAME {
+            let start = Instant::now();
+            while emulated_cycles <= CYCLES_PER_FRAME
+                && start.elapsed().as_secs_f32() < (TIME_STEP.as_secs_f32() * 0.75)
+            {
                 match g.game.vm.execute() {
                     Ok(step) => {
                         emulated_cycles += step as u64;
@@ -201,25 +231,63 @@ fn main() -> Result<(), Error> {
                     Err(err) => panic!("error on execution: {:?}", err),
                 }
             }
+            // g.game.stats.process_time = start.elapsed();
+            g.game.gui.set_stats(
+                start.elapsed(),
+                emulated_cycles,
+                g.game.vm.stack_size(),
+                g.game.vm.globals_size(),
+                g.game.vm.sp(),
+                g.game.vm.ip(),
+                g.game.vm.operation_times(),
+            );
         },
         move |g| {
+            let render_time = Instant::now();
+            g.game.gui.prepare(&g.window).expect("gui.prepare() failed");
+
             // Drawing
             g.game.vm.update_screen(g.game.pixels.get_frame());
-            if let Err(e) = g.game.pixels.render() {
-                // error!("pixels.render() failed: {}", e);
-                panic!("pixels render failed: {}", e);
-                // g.exit();
+            // Render everything together
+            let render_result = g
+                .game
+                .pixels
+                .render_with(|encoder, render_target, context| {
+                    // Render the world texture
+                    context.scaling_renderer.render(encoder, render_target);
+
+                    // Render Dear ImGui
+                    g.game
+                        .gui
+                        .render(&g.window, encoder, render_target, context)?;
+
+                    Ok(())
+                });
+
+            if render_result.is_err() {
+                panic!(
+                    "got unexpected render error {}",
+                    render_result.err().unwrap()
+                );
             }
+            // if let Err(e) = g.game.pixels.render() {
+            //     // error!("pixels.render() failed: {}", e);
+            //     panic!("pixels render failed: {}", e);
+            //     // g.exit();
+            // }
 
             // Sleep the main thread to limit drawing to the fixed time step.
             // See: https://github.com/parasyte/pixels/issues/174
             let dt = TIME_STEP.as_secs_f64() - Time::now().sub(&g.current_instant());
+            // let dt = TIME_STEP.as_secs_f64() - render_time.elapsed().as_secs_f64();
             if dt > 0.0 {
                 std::thread::sleep(Duration::from_secs_f64(dt));
             }
         },
         |g, event| {
             // Let winit_input_helper collect events to build its state.
+            g.game.gui.handle_event(&g.window, &event);
+
             if g.game.input.update(event) {
                 // Update controls
                 g.game.update_controls();
@@ -228,6 +296,10 @@ fn main() -> Result<(), Error> {
                 if g.game.input.key_pressed(VirtualKeyCode::Escape) || g.game.input.quit() {
                     g.exit();
                     return;
+                }
+
+                if g.game.input.key_released(VirtualKeyCode::Grave) {
+                    g.game.gui.toggle();
                 }
 
                 // Resize the window

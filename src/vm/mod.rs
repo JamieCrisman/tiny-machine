@@ -1,5 +1,10 @@
 mod frame;
 mod op;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use crate::compiler::Bytecode;
 
 use self::{frame::Frame, op::Opcode};
@@ -24,14 +29,21 @@ pub struct VM {
     accumulator: u16,
     globals: Vec<u8>,
     palettes: [Palette; 3],
+    debug: bool,
+    time_per_op: HashMap<Opcode, Duration>,
+    op_counts: HashMap<Opcode, u64>,
 }
 
 impl VM {
-    pub fn flash(bytecode: Bytecode, screen_size: usize) -> Self {
+    pub fn flash(bytecode: Bytecode, screen_size: usize, debug: bool) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
+        let mut globals = Vec::with_capacity(9999);
+        globals.resize(9999, 0);
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
         Self {
+            op_counts: HashMap::new(),
+            time_per_op: HashMap::new(),
             screen: vec![0; screen_size],
             frames: frames,
             frames_index: 1,
@@ -39,7 +51,8 @@ impl VM {
             constants: bytecode.constants,
             sp: 0,
             accumulator: 0,
-            globals: vec![],
+            globals,
+            debug,
             palettes: [
                 Palette {
                     colors: [
@@ -114,6 +127,7 @@ impl VM {
             // );
             return Err(VMError::Reason("Reached end".to_string()));
         }
+        let start_time = Instant::now();
         let init_ip = self.current_frame().ip;
         self.set_ip((init_ip + 1) as i64);
         let ip = self.current_frame().ip as usize;
@@ -125,6 +139,7 @@ impl VM {
             .instructions()
             .expect("expected instructions");
         let op = Opcode::from(*cur_instructions.data.get(ip).expect("expected byte"));
+        // let op = unsafe { Opcode::from(*cur_instructions.data.get_unchecked(ip)) };
         // println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
         // println!("{:?}", cur_instructions.data);
         let result: u8 = match op {
@@ -141,7 +156,7 @@ impl VM {
                 let rel_index = i16::from_be_bytes(buff);
                 // println!("rel index: {}", rel_index);
                 self.set_ip(ip as i64 + rel_index as i64 - 1);
-                1
+                4
             }
             Opcode::Clear => {
                 self.accumulator = 0;
@@ -163,14 +178,14 @@ impl VM {
             Opcode::PushAccumulator => {
                 // println!("push acc");
                 self.push2(self.accumulator)?;
-                1
+                2
             }
             Opcode::LoadAccumulator => {
                 let buff = [self.pop(), self.pop()];
 
                 let accumulator_val = u16::from_be_bytes(buff);
                 self.accumulator = accumulator_val;
-                1
+                2
             }
             Opcode::ApplyScreen => {
                 let pixel_value = self.pop();
@@ -184,7 +199,7 @@ impl VM {
                 //     "index to value {}:{}",
                 //     screen_pixel_index as usize, pixel_value
                 // );
-                2
+                3
             }
             Opcode::Constant => {
                 let buff = [
@@ -195,9 +210,10 @@ impl VM {
                 let const_index = u16::from_be_bytes(buff);
                 let new_ip = self.current_frame().ip + op.operand_width() as i64;
                 self.set_ip(new_ip);
-                self.push(self.constants.get(const_index as usize).unwrap().clone())?;
+                let val = self.constants[const_index as usize];
+                self.push(val)?;
 
-                1
+                2
             }
             Opcode::GetGlobal => {
                 let buff = [
@@ -206,9 +222,9 @@ impl VM {
                 ];
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
-                let val: u8 = self.globals.get(global_index as usize).unwrap().clone();
+                let val: u8 = self.globals[global_index as usize];
                 self.push(val)?;
-                1
+                2
             }
             Opcode::SetGlobal => {
                 let buff = [
@@ -218,11 +234,23 @@ impl VM {
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
-                self.globals.insert(global_index as usize, pop);
-                1
+                self.globals[global_index as usize] = pop;
+                2
             }
         };
 
+        if self.debug {
+            let amount = match self.time_per_op.get(&op) {
+                Some(time_so_far) => *time_so_far + start_time.elapsed(),
+                None => start_time.elapsed(),
+            };
+            self.time_per_op.insert(op.clone(), amount);
+            let count = match self.op_counts.get(&op) {
+                Some(v) => v + 1,
+                None => 1,
+            };
+            self.op_counts.insert(op.clone(), count);
+        }
         Ok(result)
     }
 
@@ -264,5 +292,36 @@ impl VM {
             // println!("palette: {} color: {} val: {}", palette, color, val);
             pixel.copy_from_slice(&self.palettes[palette as usize].colors[color as usize]);
         }
+    }
+
+    pub fn ip(&mut self) -> i64 {
+        self.current_frame().ip
+    }
+
+    pub fn sp(&self) -> usize {
+        self.sp
+    }
+
+    pub fn stack_size(&self) -> usize {
+        self.stack.len()
+    }
+
+    pub fn globals_size(&self) -> usize {
+        self.globals.len()
+    }
+
+    pub fn operation_times(&self) -> HashMap<String, Duration> {
+        self.time_per_op
+            .iter()
+            .map(|(op, dur)| {
+                return (
+                    format!("{:?}", op),
+                    Duration::from_secs_f64(
+                        dur.as_secs_f64() / *self.op_counts.get(op).unwrap() as f64,
+                        // dur.as_secs_f64(),
+                    ),
+                );
+            })
+            .collect()
     }
 }

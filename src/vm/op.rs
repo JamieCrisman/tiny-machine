@@ -1,5 +1,5 @@
 #[repr(u8)]
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum Opcode {
     NoOp = 0,
     RelJump = 1,
