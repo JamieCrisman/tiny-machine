@@ -92,18 +92,7 @@ impl Parser {
         self.next_token();
 
         let expression = match self.parse_expression(Precedence::Lowest) {
-            Some(expr) => match expr {
-                // Expression::Func {
-                //     params,
-                //     body,
-                //     name: _,
-                // } => Some(Expression::Func {
-                //     params,
-                //     body,
-                //     name: ident.0.clone(),
-                // }),
-                _ => Some(expr),
-            },
+            Some(expr) => Some(expr),
             None => {
                 self.errors.push(format!(
                     "could not parse assign statement: '{}'",
@@ -543,34 +532,11 @@ impl Parser {
         // if infix != Infix::Reduce {
         let p = precedence_of(self.cur_token_type.clone());
         self.next_token();
-        match self.parse_expression(p) {
-            // match self.parse_expression() {
-            Some(expression) => Some(Expression::Infix(
+        self.parse_expression(p).map(|expression| Expression::Infix(
                 infix,
                 Box::new(left),
                 Box::new(expression),
-            )),
-            // None => match infix.clone() {
-            //     // Infix::Modifier(InfixModifier::Swap, _) => {
-            //     //     match Parser::token_to_infix(self.cur_token_type.clone()) {
-            //     //         Some(_) => {
-            //     //             let l = Expression::Infix(
-            //     //                 infix,
-            //     //                 Box::new(left),
-            //     //                 Box::new(Expression::Blank),
-            //     //             );
-            //     //             self.parse_infix_expression(l)
-            //     //         }
-            //     //         None => Some(Expression::Infix(
-            //     //             infix,
-            //     //             Box::new(left),
-            //     //             Box::new(Expression::Blank),
-            //     //         )),
-            //     //     }
-            //     }
-            _ => None,
-            // },
-        }
+            ))
         // } else {
         //     // reduce case
         //     self.next_token();

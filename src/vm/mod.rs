@@ -210,7 +210,7 @@ impl VM {
                 let new_ip = self.current_frame().ip + op.operand_width() as i64;
                 self.set_ip(new_ip);
                 let val = self.constants[const_index as usize].to_owned();
-                self.push(val.clone())?;
+                self.push(val)?;
 
                 2
             }

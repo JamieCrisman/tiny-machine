@@ -170,7 +170,7 @@ impl Compiler {
         //     self.emit(Opcode::GreaterThan, None);
         //     return Ok(());
         // }
-        if let Err(e) = self.compile_expression(*exp_a.clone()) {
+        if let Err(e) = self.compile_expression(*exp_a) {
             return Err(e);
         }
 
@@ -178,7 +178,7 @@ impl Compiler {
         //     return Err(e);
         // }
 
-        let mut is_monadic = false;
+        let _is_monadic = false;
 
         match exp_b {
             other_expression => {

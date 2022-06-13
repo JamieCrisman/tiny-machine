@@ -155,16 +155,7 @@ impl Lexer {
                     maintain_ch = true;
                     if is_letter(x) {
                         let literal = self.read_identifier();
-                        match literal {
-                            // "fn" => TT::FUNCTION,
-                            // "let" => TT::LET,
-                            // "true" => TT::BOOL(true),
-                            // "false" => TT::BOOL(false),
-                            // "if" => TT::IF,
-                            // "else" => TT::ELSE,
-                            // "return" => TT::RETURN,
-                            _ => TT::IDENTIFIER(literal),
-                        }
+                        TT::IDENTIFIER(literal)
                     } else if is_digit(x) {
                         let literal = self.read_number();
                         TT::NUMBER(literal.parse::<f64>().unwrap())
@@ -205,7 +196,7 @@ impl Lexer {
         }
     }
 
-    fn read_string(&mut self, start_col: usize, start_line: usize) -> Token {
+    fn read_string(&mut self, _start_col: usize, _start_line: usize) -> Token {
         self.read_char();
 
         let spos = self.position;
