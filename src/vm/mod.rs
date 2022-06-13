@@ -1,13 +1,13 @@
 mod frame;
-mod op;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
 
-use crate::compiler::Bytecode;
+use crate::compiler::{Bytecode, Object};
+use crate::{code::Opcode, compiler::Objects};
 
-use self::{frame::Frame, op::Opcode};
+use self::frame::Frame;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VMError {
@@ -22,12 +22,12 @@ pub struct VM {
     screen: Vec<u8>,
     frames: Vec<Frame>,
     frames_index: usize,
-    stack: Vec<u8>,
-    constants: Vec<u8>,
+    stack: Objects,
+    constants: Objects,
     sp: usize,
 
     accumulator: u16,
-    globals: Vec<u8>,
+    globals: Vec<Object>,
     palettes: [Palette; 3],
     debug: bool,
     time_per_op: HashMap<Opcode, Duration>,
@@ -37,7 +37,7 @@ pub struct VM {
 impl VM {
     pub fn flash(bytecode: Bytecode, screen_size: usize, debug: bool) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
-        let globals = vec![0; 9999];
+        let globals = vec![Object::Null; 9999];
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
         Self {
@@ -46,7 +46,7 @@ impl VM {
             screen: vec![0; screen_size],
             frames,
             frames_index: 1,
-            stack: Vec::with_capacity(9999),
+            stack: Objects::new(),
             constants: bytecode.constants,
             sp: 0,
             accumulator: 0,
@@ -142,64 +142,64 @@ impl VM {
         // println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
         // println!("{:?}", cur_instructions.data);
         let result: u8 = match op {
-            Opcode::NoOp => 1,
+            // Opcode::NoOp => 1,
             Opcode::Pop => {
                 self.pop();
                 1
             }
-            Opcode::RelJump => {
-                let buff = [
-                    *cur_instructions.data.get(ip + 1).expect("expected byte"),
-                    *cur_instructions.data.get(ip + 2).expect("expected byte"),
-                ];
-                let rel_index = i16::from_be_bytes(buff);
-                // println!("rel index: {}", rel_index);
-                self.set_ip(ip as i64 + rel_index as i64 - 1);
-                4
-            }
-            Opcode::Clear => {
-                self.accumulator = 0;
-                1
-            }
-            Opcode::Increment => {
-                // println!("accumulate!");
-                self.accumulator = self.accumulator.wrapping_add(1);
-                self.accumulator %= self.screen.capacity() as u16;
-                1
-            }
-            Opcode::Decrement => {
-                self.accumulator = self.accumulator.wrapping_sub(1);
-                if self.accumulator >= self.screen.capacity() as u16 {
-                    self.accumulator = self.screen.capacity() as u16 - 1
-                }
-                1
-            }
-            Opcode::PushAccumulator => {
-                // println!("push acc");
-                self.push2(self.accumulator)?;
-                2
-            }
-            Opcode::LoadAccumulator => {
-                let buff = [self.pop(), self.pop()];
+            // Opcode::RelJump => {
+            //     let buff = [
+            //         *cur_instructions.data.get(ip + 1).expect("expected byte"),
+            //         *cur_instructions.data.get(ip + 2).expect("expected byte"),
+            //     ];
+            //     let rel_index = i16::from_be_bytes(buff);
+            //     // println!("rel index: {}", rel_index);
+            //     self.set_ip(ip as i64 + rel_index as i64 - 1);
+            //     4
+            // }
+            // Opcode::Clear => {
+            //     self.accumulator = 0;
+            //     1
+            // }
+            // Opcode::Increment => {
+            //     // println!("accumulate!");
+            //     self.accumulator = self.accumulator.wrapping_add(1);
+            //     self.accumulator %= self.screen.capacity() as u16;
+            //     1
+            // }
+            // Opcode::Decrement => {
+            //     self.accumulator = self.accumulator.wrapping_sub(1);
+            //     if self.accumulator >= self.screen.capacity() as u16 {
+            //         self.accumulator = self.screen.capacity() as u16 - 1
+            //     }
+            //     1
+            // }
+            // Opcode::PushAccumulator => {
+            //     // println!("push acc");
+            //     self.push2(self.accumulator)?;
+            //     2
+            // }
+            // Opcode::LoadAccumulator => {
+            //     let buff = [self.pop(), self.pop()];
 
-                let accumulator_val = u16::from_be_bytes(buff);
-                self.accumulator = accumulator_val;
-                2
-            }
-            Opcode::ApplyScreen => {
-                let pixel_value = self.pop();
-                let buff = [self.pop(), self.pop()];
+            //     let accumulator_val = u16::from_be_bytes(buff);
+            //     self.accumulator = accumulator_val;
+            //     2
+            // }
+            // Opcode::ApplyScreen => {
+            //     let pixel_value = self.pop();
+            //     let buff = [self.pop(), self.pop()];
 
-                let screen_pixel_index = u16::from_be_bytes(buff);
+            //     let screen_pixel_index = u16::from_be_bytes(buff);
 
-                // std::mem::replace(&mut self.screen[screenPixelIndex as usize], *constVal);
-                self.screen[screen_pixel_index as usize] = pixel_value;
-                // println!(
-                //     "index to value {}:{}",
-                //     screen_pixel_index as usize, pixel_value
-                // );
-                3
-            }
+            //     // std::mem::replace(&mut self.screen[screenPixelIndex as usize], *constVal);
+            //     self.screen[screen_pixel_index as usize] = pixel_value;
+            //     // println!(
+            //     //     "index to value {}:{}",
+            //     //     screen_pixel_index as usize, pixel_value
+            //     // );
+            //     3
+            // }
             Opcode::Constant => {
                 let buff = [
                     *cur_instructions.data.get(ip + 1).expect("expected byte"),
@@ -209,8 +209,8 @@ impl VM {
                 let const_index = u16::from_be_bytes(buff);
                 let new_ip = self.current_frame().ip + op.operand_width() as i64;
                 self.set_ip(new_ip);
-                let val = self.constants[const_index as usize];
-                self.push(val)?;
+                let val = self.constants[const_index as usize].to_owned();
+                self.push(val.clone())?;
 
                 2
             }
@@ -221,7 +221,7 @@ impl VM {
                 ];
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
-                let val: u8 = self.globals[global_index as usize];
+                let val: Object = self.globals[global_index as usize].to_owned();
                 self.push(val)?;
                 2
             }
@@ -236,6 +236,34 @@ impl VM {
                 self.globals[global_index as usize] = pop;
                 2
             }
+            Opcode::Add => todo!(),
+            Opcode::Subtract => todo!(),
+            Opcode::Multiply => todo!(),
+            Opcode::Divide => todo!(),
+            Opcode::True => todo!(),
+            Opcode::False => todo!(),
+            Opcode::Equal => todo!(),
+            Opcode::NotEqual => todo!(),
+            Opcode::GreaterThan => todo!(),
+            Opcode::Minus => todo!(),
+            Opcode::Bang => todo!(),
+            Opcode::Jump => todo!(),
+            Opcode::JumpNotTruthy => todo!(),
+            Opcode::Null => todo!(),
+            Opcode::Array => todo!(),
+            Opcode::Hash => todo!(),
+            Opcode::Index => todo!(),
+            Opcode::Call => todo!(),
+            Opcode::ReturnValue => todo!(),
+            Opcode::Return => todo!(),
+            Opcode::GetLocal => todo!(),
+            Opcode::SetLocal => todo!(),
+            Opcode::Reduce => todo!(),
+            Opcode::And => todo!(),
+            Opcode::Or => todo!(),
+            Opcode::LessThan => todo!(),
+            Opcode::LessThanEqual => todo!(),
+            Opcode::GreaterThanEqual => todo!(),
         };
 
         if self.debug {
@@ -253,7 +281,7 @@ impl VM {
         Ok(result)
     }
 
-    fn push(&mut self, obj: u8) -> Result<(), VMError> {
+    fn push(&mut self, obj: Object) -> Result<(), VMError> {
         if self.sp >= self.stack.capacity() {
             return Err(VMError::Reason("Stack overflow".to_string()));
         }
@@ -263,21 +291,21 @@ impl VM {
         Ok(())
     }
 
-    fn push2(&mut self, obj: u16) -> Result<(), VMError> {
-        if self.sp >= self.stack.capacity() {
-            return Err(VMError::Reason("Stack overflow".to_string()));
-        }
+    // fn push2(&mut self, obj: u16) -> Result<(), VMError> {
+    //     if self.sp >= self.stack.capacity() {
+    //         return Err(VMError::Reason("Stack overflow".to_string()));
+    //     }
 
-        let [high, low] = obj.to_be_bytes();
+    //     let [high, low] = obj.to_be_bytes();
 
-        self.stack.insert(self.sp, low);
-        self.sp += 1;
-        self.stack.insert(self.sp, high);
-        self.sp += 1;
-        Ok(())
-    }
+    //     self.stack.insert(self.sp, low);
+    //     self.sp += 1;
+    //     self.stack.insert(self.sp, high);
+    //     self.sp += 1;
+    //     Ok(())
+    // }
 
-    pub fn pop(&mut self) -> u8 {
+    pub fn pop(&mut self) -> Object {
         let val = self.stack.remove(self.sp - 1);
         self.sp -= 1;
         val

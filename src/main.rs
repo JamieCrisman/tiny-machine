@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use compiler::Objects;
 use game_loop::{game_loop, Time, TimeTrait};
 use pixels::{Error, Pixels, SurfaceTexture};
 use vm::VM;
@@ -11,23 +12,31 @@ use winit::{
     dpi::LogicalSize, event::VirtualKeyCode, event_loop::EventLoop, window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
-
+mod code;
 mod gui;
+mod parser;
 use crate::gui::Gui;
 
 mod compiler;
 mod vm;
 
-// GB inspired clock speed for the moment
-const CLOCK_SPEED: u64 = 4194304;
+// 4 for GBA, 0 for gameboy
+const CLOCK_MODIFIER: u64 = 4;
+// GB(A) inspired clock speed for the moment
+const CLOCK_SPEED: u64 = 4194304 * CLOCK_MODIFIER;
 const FRAME_RATE: u64 = 60;
 const CYCLES_PER_FRAME: u64 = CLOCK_SPEED / FRAME_RATE;
 const TIME_STEP: Duration = Duration::from_nanos(1_000_000_000 / FRAME_RATE as u64);
 
+// CELESTE
 // const WIDTH: i32 = 320;
-// const HEIGHT: i32 = 240;
-const WIDTH: i32 = 160;
-const HEIGHT: i32 = 144;
+// const HEIGHT: i32 = 180;
+// GBA
+const WIDTH: i32 = 240;
+const HEIGHT: i32 = 160;
+// GB
+// const WIDTH: i32 = 160;
+// const HEIGHT: i32 = 144;
 
 #[derive(Clone)]
 struct Stats {
@@ -198,7 +207,7 @@ fn main() -> Result<(), Error> {
                 1, 0xFF, 0xD6, // jump to putting current values on stack
             ],
         },
-        constants: vec![255, 0],
+        constants: Objects::new(),
     };
 
     let gui = Gui::new(&window, &pixels);
@@ -219,7 +228,7 @@ fn main() -> Result<(), Error> {
             let mut emulated_cycles: u64 = 0;
             let start = Instant::now();
             while emulated_cycles <= CYCLES_PER_FRAME
-                && start.elapsed().as_secs_f32() < (TIME_STEP.as_secs_f32() * 0.75)
+                && start.elapsed().as_secs_f32() < (TIME_STEP.as_secs_f32())
             {
                 match g.game.vm.execute() {
                     Ok(step) => {
@@ -228,7 +237,6 @@ fn main() -> Result<(), Error> {
                     Err(err) => panic!("error on execution: {:?}", err),
                 }
             }
-            // g.game.stats.process_time = start.elapsed();
             g.game.gui.set_stats(
                 start.elapsed(),
                 emulated_cycles,
@@ -241,8 +249,12 @@ fn main() -> Result<(), Error> {
         },
         move |g| {
             let _render_time = Instant::now();
-            g.game.gui.prepare(&g.window).expect("gui.prepare() failed");
 
+            if Time::now().sub(&g.current_instant()) > TIME_STEP.as_secs_f64() {
+                return;
+            }
+
+            g.game.gui.prepare(&g.window).expect("gui.prepare() failed");
             // Drawing
             g.game.vm.update_screen(g.game.pixels.get_frame());
             // Render everything together
