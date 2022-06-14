@@ -532,11 +532,8 @@ impl Parser {
         // if infix != Infix::Reduce {
         let p = precedence_of(self.cur_token_type.clone());
         self.next_token();
-        self.parse_expression(p).map(|expression| Expression::Infix(
-                infix,
-                Box::new(left),
-                Box::new(expression),
-            ))
+        self.parse_expression(p)
+            .map(|expression| Expression::Infix(infix, Box::new(left), Box::new(expression)))
         // } else {
         //     // reduce case
         //     self.next_token();

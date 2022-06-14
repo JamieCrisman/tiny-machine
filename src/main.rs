@@ -1,11 +1,14 @@
 use std::{
     collections::HashMap,
-    env,
+    env::{self, args},
+    fmt::Display,
+    fs,
     time::{Duration, Instant},
 };
 
-use compiler::Objects;
+use compiler::{Compiler, Objects};
 use game_loop::{game_loop, Time, TimeTrait};
+use parser::{lexer::Lexer, Parser};
 use pixels::{Error, Pixels, SurfaceTexture};
 use vm::VM;
 use winit::{
@@ -138,7 +141,33 @@ impl Machine {
     }
 }
 
-fn main() -> Result<(), Error> {
+#[derive(Debug)]
+pub enum SessionError {
+    EnvironmentError(String),
+    ParserError(Vec<String>),
+    CompilerError(String),
+    VmError(String),
+}
+
+impl Display for SessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        let reason = match self {
+            SessionError::EnvironmentError(err) => err.to_string(),
+            SessionError::ParserError(errs) => {
+                let mut err = String::new();
+                for e in errs {
+                    err.push_str(&format!("{}\n", e));
+                }
+                format!("Parser Errors:\n{}", err)
+            }
+            SessionError::CompilerError(e) => e.to_string(),
+            SessionError::VmError(e) => e.to_string(),
+        };
+        write!(f, "Error: {}", reason)
+    }
+}
+
+fn main() -> Result<(), SessionError> {
     env_logger::init();
     let event_loop = EventLoop::new();
     // Enable debug mode with `DEBUG=true` environment variable
@@ -161,58 +190,88 @@ fn main() -> Result<(), Error> {
     let pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(WIDTH as u32, HEIGHT as u32, surface_texture)?
+        match Pixels::new(WIDTH as u32, HEIGHT as u32, surface_texture) {
+            Ok(r) => r,
+            Err(e) => return Err(SessionError::EnvironmentError(e.to_string())),
+        }
     };
 
-    let bc = compiler::Bytecode {
-        instructions: compiler::Instructions {
-            data: vec![
-                // initial values
-                6, //
-                2, 0, 0, //
-                2, 0, 1, //
-                // store initial values
-                10, 0, 0, // 0
-                10, 0, 1, // 255
-                10, 0, 2, // 0
-                10, 0, 3, // 0
-                // put current values on stack
-                9, 0, 3, // 0
-                9, 0, 2, // 0
-                9, 0, 1, // 255
-                // render pixel
-                8, // 255, 0, 0
-                // clear accumulator
-                3, //
-                // load pixel color to accumulator
-                9, 0, 1, //
-                9, 0, 0, //
-                7, //
-                // increment accumulator and push to stack
-                4, //
-                6, //
-                // save pixel color
-                10, 0, 0, //
-                10, 0, 1, //
-                // load pixel location to accumulator
-                9, 0, 3, //
-                9, 0, 2, //
-                7, //
-                // increment accumulator
-                4, //
-                6, //
-                // save new pixel location
-                10, 0, 2, //
-                10, 0, 3, //
-                1, 0xFF, 0xD6, // jump to putting current values on stack
-            ],
-        },
-        constants: Objects::new(),
-    };
+    // let bc = compiler::Bytecode {
+    //     instructions: compiler::Instructions {
+    //         data: vec![
+    //             // initial values
+    //             6, //
+    //             2, 0, 0, //
+    //             2, 0, 1, //
+    //             // store initial values
+    //             10, 0, 0, // 0
+    //             10, 0, 1, // 255
+    //             10, 0, 2, // 0
+    //             10, 0, 3, // 0
+    //             // put current values on stack
+    //             9, 0, 3, // 0
+    //             9, 0, 2, // 0
+    //             9, 0, 1, // 255
+    //             // render pixel
+    //             8, // 255, 0, 0
+    //             // clear accumulator
+    //             3, //
+    //             // load pixel color to accumulator
+    //             9, 0, 1, //
+    //             9, 0, 0, //
+    //             7, //
+    //             // increment accumulator and push to stack
+    //             4, //
+    //             6, //
+    //             // save pixel color
+    //             10, 0, 0, //
+    //             10, 0, 1, //
+    //             // load pixel location to accumulator
+    //             9, 0, 3, //
+    //             9, 0, 2, //
+    //             7, //
+    //             // increment accumulator
+    //             4, //
+    //             6, //
+    //             // save new pixel location
+    //             10, 0, 2, //
+    //             10, 0, 3, //
+    //             1, 0xFF, 0xD6, // jump to putting current values on stack
+    //         ],
+    //     },
+    //     constants: Objects::new(),
+    // };
+
+    let args: Vec<String> = env::args().collect();
+    if args.len() <= 1 {
+        return Err(SessionError::EnvironmentError(
+            "No file specified".to_string(),
+        ));
+    }
+    // SAFETY: We just confirmed that the vec has more than 2 elements
+    let filename = args.get(1).unwrap();
+    let contents = fs::read_to_string(filename)
+        .expect(format!("Something went wrong reading the file ({})", filename).as_str());
+
+    if contents.is_empty() {
+        return Err(SessionError::EnvironmentError("Empty file".to_string()));
+    }
+
+    let l = Lexer::new(contents);
+    let mut parser = Parser::new(l);
+    let ast = parser.build_ast();
+    let errors = parser.errors();
+    if !errors.is_empty() {
+        return Err(SessionError::ParserError(errors));
+    }
+    let mut compiler = Compiler::new();
+    if let Err(e) = compiler.read(ast) {
+        return Err(SessionError::CompilerError(e.to_string()));
+    }
 
     let gui = Gui::new(&window, &pixels);
 
-    let machine = Machine::new(pixels, bc, gui, debug);
+    let machine = Machine::new(pixels, compiler.bytecode(), gui, debug);
 
     game_loop(
         event_loop,

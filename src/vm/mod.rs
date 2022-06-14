@@ -30,7 +30,7 @@ pub struct VM {
 
     last_popped: Option<Object>,
     // accumulator: u16,
-    globals: Vec<Object>,
+    globals: Objects,
     palettes: [Palette; 3],
     debug: bool,
     time_per_op: HashMap<Opcode, Duration>,
@@ -40,7 +40,6 @@ pub struct VM {
 impl VM {
     pub fn flash(bytecode: Bytecode, screen_size: usize, debug: bool) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
-        let globals = vec![Object::Null; 9999];
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
         Self {
@@ -54,7 +53,7 @@ impl VM {
             sp: 0,
             // accumulator: 0,
             last_popped: None,
-            globals,
+            globals: Objects::new(),
             debug,
             palettes: [
                 Palette {
@@ -225,7 +224,7 @@ impl VM {
                 ];
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
-                let val: Object = self.globals[global_index as usize].to_owned();
+                let val: Object = self.globals.get(global_index as usize).unwrap().clone();
                 self.push(val)?;
                 2
             }
@@ -237,7 +236,7 @@ impl VM {
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
-                self.globals[global_index as usize] = pop;
+                self.globals.insert(global_index as usize, pop);
                 2
             }
             Opcode::Add
@@ -1053,6 +1052,19 @@ mod tests {
 
         run_vm_test(tests);
     }
+
+    // #[test]
+    // fn test_reassignment() {
+    //     let tests: Vec<VMTestCase> = vec![VMTestCase {
+    //         expected_top: Some(Object::Number(2000.0)),
+    //         input: r#"a <- [10,20,30,40]\+;
+    //         a <- a * 20"#
+    //             .to_string(),
+    //         expected_cycles: 30,
+    //     }];
+
+    //     run_vm_test(tests);
+    // }
 
     #[test]
     fn test_array() {
