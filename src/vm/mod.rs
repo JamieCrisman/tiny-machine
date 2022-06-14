@@ -250,8 +250,8 @@ impl VM {
             | Opcode::GreaterThan
             | Opcode::GreaterThanEqual
             | Opcode::Equal => {
-                let value = self.execute_binary_operation(op.clone())?;
-                value
+                
+                self.execute_binary_operation(op.clone())?
             }
             Opcode::True => todo!(),
             Opcode::False => todo!(),

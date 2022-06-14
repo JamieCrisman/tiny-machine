@@ -1,15 +1,15 @@
 use std::{
     collections::HashMap,
-    env::{self, args},
+    env::{self},
     fmt::Display,
     fs,
     time::{Duration, Instant},
 };
 
-use compiler::{Compiler, Objects};
+use compiler::{Compiler};
 use game_loop::{game_loop, Time, TimeTrait};
 use parser::{lexer::Lexer, Parser};
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 use vm::VM;
 use winit::{
     dpi::LogicalSize, event::VirtualKeyCode, event_loop::EventLoop, window::WindowBuilder,
@@ -251,7 +251,7 @@ fn main() -> Result<(), SessionError> {
     // SAFETY: We just confirmed that the vec has more than 2 elements
     let filename = args.get(1).unwrap();
     let contents = fs::read_to_string(filename)
-        .expect(format!("Something went wrong reading the file ({})", filename).as_str());
+        .unwrap_or_else(|_| panic!("Something went wrong reading the file ({})", filename));
 
     if contents.is_empty() {
         return Err(SessionError::EnvironmentError("Empty file".to_string()));
