@@ -418,7 +418,7 @@ pub enum SymbolType {
     SLASH,
     // MIN,
     // MAX,
-    MOD,
+    // MOD,
     AND,
     OR,
     EQUAL,

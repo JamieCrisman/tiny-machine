@@ -4,10 +4,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::compiler::{Bytecode, Object};
+use crate::compiler::{Bytecode, Object, ObjectType, SymbolType};
 use crate::{code::Opcode, compiler::Objects};
 
 use self::frame::Frame;
+
+const DEFAULT_STACK_SIZE: usize = 2048;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VMError {
@@ -26,7 +28,8 @@ pub struct VM {
     constants: Objects,
     sp: usize,
 
-    accumulator: u16,
+    last_popped: Option<Object>,
+    // accumulator: u16,
     globals: Vec<Object>,
     palettes: [Palette; 3],
     debug: bool,
@@ -46,10 +49,11 @@ impl VM {
             screen: vec![0; screen_size],
             frames,
             frames_index: 1,
-            stack: Objects::new(),
+            stack: Objects::with_capacity(DEFAULT_STACK_SIZE),
             constants: bytecode.constants,
             sp: 0,
-            accumulator: 0,
+            // accumulator: 0,
+            last_popped: None,
             globals,
             debug,
             palettes: [
@@ -236,34 +240,57 @@ impl VM {
                 self.globals[global_index as usize] = pop;
                 2
             }
-            Opcode::Add => todo!(),
-            Opcode::Subtract => todo!(),
-            Opcode::Multiply => todo!(),
-            Opcode::Divide => todo!(),
+            Opcode::Add
+            | Opcode::Divide
+            | Opcode::Multiply
+            | Opcode::Subtract
+            | Opcode::And
+            | Opcode::Or
+            | Opcode::LessThan
+            | Opcode::LessThanEqual
+            | Opcode::GreaterThan
+            | Opcode::GreaterThanEqual
+            | Opcode::Equal => {
+                let value = self.execute_binary_operation(op.clone())?;
+                value
+            }
             Opcode::True => todo!(),
             Opcode::False => todo!(),
-            Opcode::Equal => todo!(),
-            Opcode::NotEqual => todo!(),
-            Opcode::GreaterThan => todo!(),
-            Opcode::Minus => todo!(),
+            Opcode::Minus => {
+                self.execute_minus_operator()?;
+                // TODO: figure out how to reduce this cost without allowing things to loop forever?
+                1
+            }
             Opcode::Bang => todo!(),
             Opcode::Jump => todo!(),
             Opcode::JumpNotTruthy => todo!(),
             Opcode::Null => todo!(),
-            Opcode::Array => todo!(),
+            Opcode::Array => {
+                let buff = [
+                    *cur_instructions.data.get(ip + 1).expect("expected byte"),
+                    *cur_instructions.data.get(ip + 2).expect("expected byte"),
+                ];
+                let element_count = u16::from_be_bytes(buff);
+                self.set_ip((ip + 2) as i64);
+                let array = self.build_array(self.sp - element_count as usize, self.sp);
+                self.sp -= element_count as usize;
+                self.push(array)?;
+                1
+            }
             Opcode::Hash => todo!(),
-            Opcode::Index => todo!(),
+            Opcode::Index => {
+                let index = self.pop();
+                let left = self.pop();
+                self.execute_index_expression(left, index)?;
+                1
+            }
             Opcode::Call => todo!(),
             Opcode::ReturnValue => todo!(),
             Opcode::Return => todo!(),
             Opcode::GetLocal => todo!(),
             Opcode::SetLocal => todo!(),
-            Opcode::Reduce => todo!(),
-            Opcode::And => todo!(),
-            Opcode::Or => todo!(),
-            Opcode::LessThan => todo!(),
-            Opcode::LessThanEqual => todo!(),
-            Opcode::GreaterThanEqual => todo!(),
+            Opcode::Reduce => self.execute_reduce_operation()?,
+            Opcode::NotEqual => todo!(),
         };
 
         if self.debug {
@@ -281,6 +308,193 @@ impl VM {
         Ok(result)
     }
 
+    fn arith_objects(op: SymbolType, a: Object, b: Object) -> Result<Object, VMError> {
+        match (a, b) {
+            (Object::Number(an), Object::Number(bn)) => match op {
+                SymbolType::PLUS => Ok(Object::Number(an + bn)),
+                SymbolType::MINUS => Ok(Object::Number(an - bn)),
+                SymbolType::ASTERISK => Ok(Object::Number(an * bn)),
+                SymbolType::SLASH => Ok(Object::Number(an / bn)),
+                SymbolType::AND => Ok(Object::Number(an * bn)),
+                SymbolType::OR => Ok(Object::Number((an + bn) - (an * bn))),
+                SymbolType::EQUAL => {
+                    if f64::abs(an - bn) < f64::EPSILON {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
+                SymbolType::LESSTHAN => {
+                    if an < bn {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
+                SymbolType::LESSTHANEQUAL => {
+                    if an <= bn {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
+                SymbolType::GREATERTHAN => {
+                    if an > bn {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
+                SymbolType::GREATERTHANEQUAL => {
+                    if an >= bn {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
+                _ => Err(VMError::Reason(format!(
+                    "Unexpected operation type: {:?}",
+                    op
+                ))),
+            },
+            (Object::Array(arr), Object::Number(num))
+            | (Object::Number(num), Object::Array(arr)) => {
+                let mut result = vec![];
+                for i in arr {
+                    match VM::arith_objects(op.clone(), i, Object::Number(num)) {
+                        Ok(val) => result.push(val),
+                        Err(err) => return Err(err),
+                    }
+                }
+
+                Ok(Object::Array(result))
+            }
+            (Object::Array(arr1), Object::Array(arr2)) => {
+                if arr1.len() != arr2.len() {
+                    return Err(VMError::Reason(format!(
+                        "Mismatch array length ({} and {})",
+                        arr1.len(),
+                        arr2.len()
+                    )));
+                }
+                let mut result = vec![];
+                for (aa, bb) in arr1.iter().zip(arr2.iter()) {
+                    match VM::arith_objects(op.clone(), aa.to_owned(), bb.to_owned()) {
+                        Ok(val) => result.push(val),
+                        Err(err) => return Err(err),
+                    }
+                }
+                Ok(Object::Array(result))
+            }
+            (a, b) => Err(VMError::Reason(format!(
+                "Unexpected addition of types {:?} and {:?}",
+                a, b
+            ))),
+        }
+    }
+
+    fn execute_array_reduce(
+        &mut self,
+        operation: SymbolType,
+        target: Vec<Object>,
+    ) -> Result<(), VMError> {
+        let mut iter = target.iter();
+        let mut result_object: Object = iter.next().unwrap().to_owned();
+        for obj in iter {
+            result_object =
+                match VM::arith_objects(operation.clone(), result_object, obj.to_owned()) {
+                    Ok(res) => res,
+                    Err(err) => return Err(err),
+                };
+        }
+        self.push(result_object)?;
+
+        Ok(())
+    }
+
+    fn execute_reduce_operation(&mut self) -> Result<u8, VMError> {
+        let operation = self.pop();
+        let target = self.pop();
+
+        let cycles: u8;
+        match (target, operation) {
+            (Object::Number(n), _) => {
+                // self.execute_binary_integer_operation(op, left, right)?;
+                cycles = 1;
+                self.push(Object::Number(n))?
+            }
+            (Object::Array(array_target), Object::Symbol(symbol_type)) => {
+                cycles = 4;
+                self.execute_array_reduce(symbol_type, array_target)?;
+            }
+            // (ObjectType::String, ObjectType::String) => {
+            //     self.execute_binary_string_operation(op, left, right)?;
+            // }
+            (a, b) => {
+                return Err(VMError::Reason(format!(
+                    "Unsupported reduce action for {:?} and {:?}",
+                    a, b
+                )))
+            }
+        };
+
+        // self.push(Object::Int(left + right))?;
+
+        Ok(cycles)
+    }
+
+    fn execute_binary_operation(&mut self, op: Opcode) -> Result<u8, VMError> {
+        let right = self.pop();
+        let left = self.pop();
+        let operation = match op {
+            Opcode::Subtract => SymbolType::MINUS,
+            Opcode::Add => SymbolType::PLUS,
+            Opcode::Multiply => SymbolType::ASTERISK,
+            Opcode::Divide => SymbolType::SLASH,
+            Opcode::And => SymbolType::AND,
+            Opcode::Or => SymbolType::OR,
+            Opcode::Equal => SymbolType::EQUAL,
+            Opcode::LessThan => SymbolType::LESSTHAN,
+            Opcode::LessThanEqual => SymbolType::LESSTHANEQUAL,
+            Opcode::GreaterThan => SymbolType::GREATERTHAN,
+            Opcode::GreaterThanEqual => SymbolType::GREATERTHANEQUAL,
+            _ => {
+                return Err(VMError::Reason(format!(
+                    "Unsupported operation for {:?} and {:?}",
+                    left, right
+                )))
+            }
+        };
+
+        let left_size: u8;
+        let right_size: u8;
+
+        match (left.object_type(), right.object_type()) {
+            (ObjectType::Number, ObjectType::Number)
+            | (ObjectType::Array, ObjectType::Number)
+            | (ObjectType::Array, ObjectType::Array) => {
+                left_size = match left.object_type() {
+                    ObjectType::Array => 4,
+                    _ => 1,
+                };
+                right_size = match right.object_type() {
+                    ObjectType::Array => 4,
+                    _ => 1,
+                };
+                let result = VM::arith_objects(operation, left, right)?;
+                self.push(result)?;
+            }
+            (a, b) => {
+                return Err(VMError::Reason(format!(
+                    "Unsupported binary action for {:?} and {:?}",
+                    a, b
+                )))
+            }
+        };
+
+        Ok(right_size + left_size)
+    }
+
     fn push(&mut self, obj: Object) -> Result<(), VMError> {
         if self.sp >= self.stack.capacity() {
             return Err(VMError::Reason("Stack overflow".to_string()));
@@ -289,6 +503,84 @@ impl VM {
         self.stack.insert(self.sp, obj);
         self.sp += 1;
         Ok(())
+    }
+
+    fn build_array(&mut self, start_index: usize, end_index: usize) -> Object {
+        let mut elements: Vec<Object> = vec![];
+        if start_index != end_index {
+            for pos in start_index..end_index {
+                let item = self
+                    .stack
+                    .get(pos)
+                    .expect("expected a valid index position")
+                    .clone();
+                elements.push(item);
+            }
+        }
+
+        Object::Array(elements)
+    }
+
+    fn execute_index_expression(&mut self, left: Object, index: Object) -> Result<(), VMError> {
+        if left.object_type() == ObjectType::Array && index.object_type() == ObjectType::Number {
+            self.execute_array_index(left, index)
+        // } else if left.object_type() == ObjectType::Hash {
+        // return self.execute_hash_index(left, index);
+        } else {
+            return Err(VMError::Reason(format!(
+                "index operator not supported for {:?}",
+                left.object_type()
+            )));
+        }
+    }
+
+    fn execute_array_index(&mut self, left: Object, index: Object) -> Result<(), VMError> {
+        let index_val = match index {
+            Object::Number(i) => i,
+            _ => {
+                return Err(VMError::Reason(format!(
+                    "expected array type, but got {:?}",
+                    left.object_type()
+                )))
+            }
+        } as i64;
+
+        match left {
+            Object::Array(a) => {
+                let max = (a.len() - 1) as i64;
+                if index_val < 0 || index_val > max {
+                    return Err(VMError::Reason(format!(
+                        "index[{}] is out of bounds (max {})",
+                        index_val, max,
+                    )));
+                }
+
+                return self.push(
+                    a.get(index_val as usize)
+                        .expect("expected a value from index")
+                        .clone(),
+                );
+            }
+            _ => {
+                return Err(VMError::Reason(format!(
+                    "expected array type, but got {:?}",
+                    left.object_type()
+                )))
+            }
+        }
+    }
+
+    fn execute_minus_operator(&mut self) -> Result<(), VMError> {
+        let op = self.pop();
+
+        match op {
+            Object::Number(n) => self.push(Object::Number(-n)),
+            _ => Err(VMError::Reason(format!(
+                "unsupported minus type: {:?} for {:?}",
+                op.object_type(),
+                op,
+            ))),
+        }
     }
 
     // fn push2(&mut self, obj: u16) -> Result<(), VMError> {
@@ -307,6 +599,7 @@ impl VM {
 
     pub fn pop(&mut self) -> Object {
         let val = self.stack.remove(self.sp - 1);
+        self.last_popped = Some(val.clone());
         self.sp -= 1;
         val
     }
@@ -350,5 +643,465 @@ impl VM {
                 );
             })
             .collect()
+    }
+
+    fn last_popped(&self) -> Option<Object> {
+        self.last_popped.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // use crate::evaluator::builtins::new_builtins;
+    // use crate::code::*;
+    // use crate::compiler::symbol_table::SymbolTable;
+    use crate::compiler::*;
+    // use crate::evaluator::object::*;
+    // use crate::lexer;
+    use crate::parser;
+    use crate::parser::lexer;
+    use crate::vm::VM;
+    // use std::cell::RefCell;
+    // use std::collections::HashMap;
+    // use std::rc::Rc;
+
+    struct VMTestCase {
+        input: String,
+        expected_top: Option<Object>,
+        expected_cycles: i32,
+    }
+
+    #[test]
+    fn test_arithmetic() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(2.0)),
+            input: "1+1".to_string(),
+            expected_cycles: 7,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_arithmetic_2() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(-6.0)),
+            input: "5 - 10 - 1".to_string(),
+            expected_cycles: 11,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_add_reduce() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(15.0)),
+            input: "[1,2,3,4,5]\\+".to_string(),
+            expected_cycles: 18,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_add_reduce_inner_array() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(6.0),
+                Object::Number(7.0),
+                Object::Number(8.0),
+            ])),
+            input: "[[1, 2, 3],5]\\+".to_string(),
+            expected_cycles: 17,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_add_reduce_inner_arrays() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(5.0),
+                Object::Number(7.0),
+                Object::Number(9.0),
+            ])),
+            input: "[[1, 2, 3], [4, 5, 6]]\\+".to_string(),
+            expected_cycles: 22,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_inner_arrays_multiply() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(4.0),
+                Object::Number(10.0),
+                Object::Number(18.0),
+            ])),
+            input: "[[1, 2, 3], [4, 5, 6]]\\*".to_string(),
+            expected_cycles: 22,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_multiply() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(720.0)),
+            input: "[1, 2, 3, 4, 5, 6]\\*".to_string(),
+            expected_cycles: 20,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_inner_arrays_div() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(0.25),
+                Object::Number(2.0 / 5.0),
+                Object::Number(0.5),
+            ])),
+            input: "[[1, 2, 3], [4, 5, 6]]\\/".to_string(),
+            expected_cycles: 22,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_sub() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(0.0)),
+            input: "[100, 25, 25, 25, 25]\\-".to_string(),
+            expected_cycles: 18,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_sub_zero_one() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(-1.0)),
+            input: "[0, 1]\\-".to_string(),
+            expected_cycles: 12,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_sub_one_zero() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(1.0)),
+            input: "[1, 0]\\-".to_string(),
+            expected_cycles: 12,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_inner_arrays_sub() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(-20.0),
+                Object::Number(-20.0),
+            ])),
+            input: "[[10, 20], [30, 40]]\\-".to_string(),
+            expected_cycles: 18,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_reduce_arrays_inner_arrays_sub_2() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Number(60.0),
+                Object::Number(40.0),
+            ])),
+            input: "[[100, 100], [10, 20], [30, 40]]\\-".to_string(),
+            expected_cycles: 23,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_add_reduce_inner_array_into_value() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(21.0)),
+            input: "a <- [1, 2, 3, 4, 5, 6]\\+;a".to_string(),
+            expected_cycles: 24,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_negative_number() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(-10.0)),
+            input: "-10".to_string(),
+            expected_cycles: 4,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_equal_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10.5=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10=10.5".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "(0.1+0.2)=0.3".to_string(),
+                expected_cycles: 11,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(1.0),
+                    Object::Number(0.0),
+                    Object::Number(0.0),
+                ])),
+                input: "[-10, 1, 4]=[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_lessthan_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10.5<10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10<10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10<10.5".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "(0.1+0.2)<0.3".to_string(),
+                expected_cycles: 11,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(0.0),
+                    Object::Number(1.0),
+                    Object::Number(0.0),
+                ])),
+                input: "[-10, 1, 4]<[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_lessthanequal_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10.5<=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10<=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10<=10.5".to_string(),
+                expected_cycles: 7,
+            },
+            // TODO: Fix somehow
+            // VMTestCase {
+            //     expected_top: Some(Object::Number(1.0)),
+            //     input: "(0.1+0.2)≤0.3".to_string(),
+            // },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(1.0),
+                    Object::Number(1.0),
+                    Object::Number(0.0),
+                ])),
+                input: "[-10, 1, 4]<=[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_greaterthan_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10.5>10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10>10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10>10.5".to_string(),
+                expected_cycles: 7,
+            },
+            // TODO: gotta fix somehow
+            // VMTestCase {
+            //     expected_top: Some(Object::Number(0.0)),
+            //     input: "(0.1+0.2)>0.3".to_string(),
+            // },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(0.0),
+                    Object::Number(0.0),
+                    Object::Number(1.0),
+                ])),
+                input: "[-10, 1, 4]>[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_greaterthanequal_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10.5>=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10>=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10>=10.5".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "(0.1+0.2)>=0.3".to_string(),
+                expected_cycles: 11,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(1.0),
+                    Object::Number(0.0),
+                    Object::Number(1.0),
+                ])),
+                input: "[-10, 1, 4]>=[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_let() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(10.0)),
+            input: "a <- 10; a".to_string(),
+            expected_cycles: 7,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(10.0)),
+                input: "a <- [10]; a[1-1]".to_string(),
+                expected_cycles: 15,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(10.0)),
+                input: "a <- [[[10]]]; a[1-1][0][100-100]".to_string(),
+                expected_cycles: 27,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    fn parse(input: String) -> parser::ast::Program {
+        let l = lexer::Lexer::new(input);
+        let mut p = parser::Parser::new(l);
+        p.build_ast()
+    }
+
+    fn run_vm_test(tests: Vec<VMTestCase>) {
+        for test in tests {
+            println!("--- testing: {}", test.input);
+            let ast = parse(test.input);
+            let mut c = Compiler::new();
+            let compile_result = c.read(ast);
+            assert!(compile_result.is_ok());
+
+            let mut vmm = VM::flash(c.bytecode(), 0, false);
+            let mut cycles = 0;
+            while cycles < test.expected_cycles {
+                let result = vmm.execute();
+                assert!(
+                    result.is_ok(),
+                    "got error on cycle {}: {:?}",
+                    cycles,
+                    result.unwrap_err()
+                );
+                cycles += result.expect("expected value") as i32;
+            }
+            if test.expected_top.clone().is_some() {
+                let stack_elem = vmm.last_popped();
+                assert_eq!(stack_elem, test.expected_top);
+            }
+        }
     }
 }
