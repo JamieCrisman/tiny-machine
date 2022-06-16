@@ -35,6 +35,7 @@ pub struct VM {
     debug: bool,
     time_per_op: HashMap<Opcode, Duration>,
     op_counts: HashMap<Opcode, u64>,
+    halted: bool,
 }
 
 impl VM {
@@ -55,6 +56,7 @@ impl VM {
             last_popped: None,
             globals: Objects::new(),
             debug,
+            halted: false,
             palettes: [
                 Palette {
                     colors: [
@@ -100,11 +102,12 @@ impl VM {
     }
 
     fn current_frame(&mut self) -> &Frame {
-        return self
-            .frames
-            .get((self.frames_index - 1) as usize)
-            .as_ref()
-            .unwrap();
+        &self.frames[self.frames_index-1 as usize]
+        //return self
+        //    .frames
+        //    .get((self.frames_index - 1) as usize)
+        //    .as_ref()
+        //    .unwrap();
     }
 
     fn set_ip(&mut self, new_ip: i64) {
@@ -112,6 +115,10 @@ impl VM {
     }
 
     pub fn execute(&mut self) -> Result<u8, VMError> {
+        if self.halted {
+            return Ok(1)
+        }
+
         if self.current_frame().ip
             >= (self
                 .current_frame()
@@ -127,7 +134,8 @@ impl VM {
             //     self.current_frame().ip,
             //     sp,
             // );
-            return Err(VMError::Reason("Reached end".to_string()));
+            self.halted = true;
+            return Ok(1);
         }
         let start_time = Instant::now();
         let init_ip = self.current_frame().ip;
@@ -646,6 +654,10 @@ impl VM {
 
     fn last_popped(&self) -> Option<Object> {
         self.last_popped.clone()
+    }
+
+    pub fn halted(&self) -> bool {
+        self.halted
     }
 }
 
