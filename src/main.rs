@@ -6,7 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use compiler::{Compiler};
+
+use compiler::Compiler;
 use game_loop::{game_loop, Time, TimeTrait};
 use parser::{lexer::Lexer, Parser};
 use pixels::{Pixels, SurfaceTexture};
@@ -53,6 +54,7 @@ struct Stats {
     ip: i64,
     sp: usize,
     op_times: HashMap<String, Duration>,
+    halted: bool,
 }
 
 struct Machine {
@@ -287,6 +289,7 @@ fn main() -> Result<(), SessionError> {
             let mut emulated_cycles: u64 = 0;
             let start = Instant::now();
             while emulated_cycles <= CYCLES_PER_FRAME
+                && !g.game.vm.halted()
                 && start.elapsed().as_secs_f32() < (TIME_STEP.as_secs_f32())
             {
                 match g.game.vm.execute() {
@@ -304,6 +307,7 @@ fn main() -> Result<(), SessionError> {
                 g.game.vm.sp(),
                 g.game.vm.ip(),
                 g.game.vm.operation_times(),
+                g.game.vm.halted(),
             );
         },
         move |g| {
@@ -347,7 +351,7 @@ fn main() -> Result<(), SessionError> {
             // Sleep the main thread to limit drawing to the fixed time step.
             // See: https://github.com/parasyte/pixels/issues/174
             let dt = TIME_STEP.as_secs_f64() - Time::now().sub(&g.current_instant());
-            // let dt = TIME_STEP.as_secs_f64() - render_time.elapsed().as_secs_f64();
+            //let dt = TIME_STEP.as_secs_f64() - render_time.elapsed().as_secs_f64();
             if dt > 0.0 {
                 std::thread::sleep(Duration::from_secs_f64(dt));
             }

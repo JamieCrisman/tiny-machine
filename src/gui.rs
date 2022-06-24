@@ -79,6 +79,7 @@ impl Gui {
                 ip: 0,
                 sp: 0,
                 stack_size: 0,
+                halted: false,
                 op_times: HashMap::new(),
             },
         }
@@ -165,6 +166,7 @@ impl Gui {
                     ui.text(format!("IP: {:?}", self.stats.ip));
                     ui.text(format!("SP: {:?}", self.stats.sp));
                     ui.text(format!("Stack Size: {:?}", self.stats.stack_size));
+                    ui.text(format!("Halted: {:?}", self.stats.halted));
                     ui.text(format!("Globals Size: {:?}", self.stats.globals_size));
                     let mut op_string: String = String::new();
                     // for (op_name, dur) in self.stats.op_times.iter() {
@@ -225,6 +227,7 @@ impl Gui {
         sp: usize,
         ip: i64,
         op_times: HashMap<String, Duration>,
+        halted: bool,
     ) {
         self.stats.process_time = process_time;
         self.stats.cycles = cycles;
@@ -237,5 +240,6 @@ impl Gui {
         self.stats.ip = ip;
         self.stats.op_times.clear();
         self.stats.op_times.clone_from(&op_times);
+        self.stats.halted = halted;
     }
 }
