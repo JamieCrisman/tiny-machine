@@ -102,7 +102,7 @@ impl VM {
     }
 
     fn current_frame(&mut self) -> &Frame {
-        &self.frames[self.frames_index-1 as usize]
+        &self.frames[self.frames_index-1_usize]
         //return self
         //    .frames
         //    .get((self.frames_index - 1) as usize)
