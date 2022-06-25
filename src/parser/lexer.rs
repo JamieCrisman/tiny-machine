@@ -95,8 +95,8 @@ impl Lexer {
                 ';' => TT::SEMICOLON,
                 '(' => TT::LPAREN,
                 ')' => TT::RPAREN,
-                // '{' => TT::LBRACE,
-                // '}' => TT::RBRACE,
+                '{' => TT::LBRACE,
+                '}' => TT::RBRACE,
                 '[' => TT::LBRACKET,
                 ']' => TT::RBRACKET,
                 '+' => TT::PLUS,
@@ -155,7 +155,16 @@ impl Lexer {
                     maintain_ch = true;
                     if is_letter(x) {
                         let literal = self.read_identifier();
-                        TT::IDENTIFIER(literal)
+                        match literal.as_str() {
+                        //    "fn" => Token::FUNCTION,
+                        //    "let" => Token::LET,
+                        //    "true" => Token::BOOL(true),
+                        //    "false" => Token::BOOL(false),
+                            "if" => TT::IF,
+                            "else" => TT::ELSE,
+                        //    "return" => Token::RETURN,
+                            _ => TT::IDENTIFIER(literal),
+                        }
                     } else if is_digit(x) {
                         let literal = self.read_number();
                         TT::NUMBER(literal.parse::<f64>().unwrap())
@@ -262,8 +271,8 @@ mod tests {
     #[test]
     fn test_next_token_basics() {
         // let input = "=+(){},;";
-        let input = "+()[],;";
-        let expected: [TT; 8] = [
+        let input = "+()[],;if";
+        let expected: [TT; 9] = [
             // TT::ASSIGN,
             TT::PLUS,
             TT::LPAREN,
@@ -274,6 +283,7 @@ mod tests {
             // TT::RBRACE,
             TT::COMMA,
             TT::SEMICOLON,
+            TT::IF,
             TT::EOF,
         ];
 

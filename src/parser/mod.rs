@@ -6,7 +6,7 @@ use crate::parser::ast::{precedence_of, Expression, Infix, Literal, Program, Sta
 use crate::parser::lexer::Lexer;
 use crate::parser::token::{Token, TokenType};
 
-use self::ast::{Identifier, Postfix, PostfixModifier, Precedence, Prefix};
+use self::ast::{BlockStatement, Identifier, Postfix, PostfixModifier, Precedence, Prefix};
 
 pub struct Parser {
     l: Lexer,
@@ -159,7 +159,7 @@ impl Parser {
             TokenType::BANG
             | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::LPAREN => self.parse_grouped_expr(),
-            // TokenType::IF => self.parse_if_expression(),
+            TokenType::IF => self.parse_if_expression(),
             // TokenType::FUNCTION => self.parse_func_expression(),
             _ => {
                 // self.error_no_prefix_Parser();
@@ -370,54 +370,54 @@ impl Parser {
         Some(list)
     }
 
-    // fn parse_block_statement(&mut self) -> BlockStatement {
-    //     self.next_token();
-    //     let mut block = vec![];
-    //     while self.cur_token != TokenType::RBRACE && self.cur_token != TokenType::EOF {
-    //         match self.parse_statement() {
-    //             Some(stmt) => block.push(stmt),
-    //             None => {}
-    //         }
-    //         self.next_token();
-    //     }
+     fn parse_block_statement(&mut self) -> BlockStatement {
+         self.next_token();
+         let mut block = vec![];
+         while self.cur_token.as_ref().unwrap().token_type != TokenType::RBRACE && self.cur_token.as_ref().unwrap().token_type != TokenType::EOF {
+             match self.parse_statement() {
+                 Some(stmt) => block.push(stmt),
+                 None => {}
+             }
+             self.next_token();
+         }
 
-    //     block
-    // }
+         block
+     }
 
-    // fn parse_if_expression(&mut self) -> Option<Expression> {
-    //     if !self.expect_peek(TokenType::LPAREN) {
-    //         return None;
-    //     }
+     fn parse_if_expression(&mut self) -> Option<Expression> {
+         if !self.expect_peek(TokenType::LPAREN) {
+             return None;
+         }
 
-    //     self.next_token();
+         self.next_token();
 
-    //     let cond = match self.parse_expression(Precedence::Lowest) {
-    //         Some(expr) => expr,
-    //         None => return None,
-    //     };
+         let cond = match self.parse_expression(Precedence::Lowest) {
+             Some(expr) => expr,
+             None => return None,
+         };
 
-    //     if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
-    //         return None;
-    //     }
+         if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
+             return None;
+         }
 
-    //     let consequence = self.parse_block_statement();
-    //     let mut alternative = None;
+         let consequence = self.parse_block_statement();
+         let mut alternative = None;
 
-    //     if self.peek_token == TokenType::ELSE {
-    //         self.next_token();
-    //         if !self.expect_peek(TokenType::LBRACE) {
-    //             return None;
-    //         }
+         if self.peek_token.as_ref().unwrap().token_type == TokenType::ELSE {
+             self.next_token();
+             if !self.expect_peek(TokenType::LBRACE) {
+                 return None;
+             }
 
-    //         alternative = Some(self.parse_block_statement());
-    //     }
+             alternative = Some(self.parse_block_statement());
+         }
 
-    //     Some(Expression::If {
-    //         condition: Box::new(cond),
-    //         consequence,
-    //         alternative,
-    //     })
-    // }
+         Some(Expression::If {
+             condition: Box::new(cond),
+             consequence,
+             alternative,
+         })
+     }
 
     fn token_to_infix(tt: TokenType) -> Option<Infix> {
         match tt {
@@ -950,6 +950,53 @@ mod tests {
         assert_eq!(ast, expected_ast);
     }
 
+    #[test]
+    fn test_if_statement() {
+        let input = String::from("if (1) { 2 }");
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![
+            Statement::Expression(Expression::If{
+                condition: Box::new(Expression::Literal(Literal::Number(1.0))),
+                consequence: vec![
+                    Statement::Expression(Expression::Literal(Literal::Number(2.0)))
+                ],
+                alternative: None
+            })
+        ];
+
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
+
+    #[test]
+    fn test_if_else_statement() {
+        let input = String::from("if (1) { 2 } else { 3 }");
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![
+            Statement::Expression(Expression::If{
+                condition: Box::new(Expression::Literal(Literal::Number(1.0))),
+                consequence: vec![
+                    Statement::Expression(Expression::Literal(Literal::Number(2.0)))
+                ],
+                alternative: Some(vec![
+                    Statement::Expression(Expression::Literal(Literal::Number(3.0)))
+                ])
+            })
+        ];
+
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
     #[test]
     fn test_reduce() {
         let input =

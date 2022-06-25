@@ -43,11 +43,11 @@ pub enum Expression {
     Prefix(Prefix, Box<Expression>),
     Infix(Infix, Box<Expression>, Box<Expression>),
     Index(Box<Expression>, Box<Expression>),
-    // If {
-    //     condition: Box<Expression>,
-    //     consequence: BlockStatement,
-    //     alternative: Option<BlockStatement>,
-    // },
+    If {
+         condition: Box<Expression>,
+         consequence: BlockStatement,
+         alternative: Option<BlockStatement>,
+    },
     // Func {
     //     params: Vec<Ident>,
     //     body: BlockStatement,
@@ -74,25 +74,25 @@ impl fmt::Display for Expression {
             Self::Infix(i, e1, e2) => {
                 write!(f, "({} {} {})", e1, i, e2)
             } // _ => write!(f, "D:"),
-            // Self::If {
-            //     condition: _,
-            //     consequence: _,
-            //     alternative: _,
-            // } => {
-            //     write!(
-            //         f,
-            //         "TODO // Can't implement display for Vec, need to wrap it"
-            //     )
-            //     //                if (alternative.is_some()) {
-            //     //                    write!(
-            //     //                        f,
-            //     //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
-            //     //                        condition, consequence, alternative
-            //     //                    )
-            //     //                } else {
-            //     //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
-            //     //                }
-            // }
+             Self::If {
+                 condition: _,
+                 consequence: _,
+                 alternative: _,
+             } => {
+                 write!(
+                     f,
+                     "TODO // Can't implement display for Vec, need to wrap it"
+                 )
+                 //                if (alternative.is_some()) {
+                 //                    write!(
+                 //                        f,
+                 //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
+                 //                        condition, consequence, alternative
+                 //                    )
+                 //                } else {
+                 //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
+                 //                }
+             }
             // Self::Func {
             //     params: _,
             //     body: _,
@@ -273,6 +273,7 @@ pub fn precedence_of(t: TT) -> Precedence {
         | TT::LESSTHANEQUAL
         | TT::GREATERTHAN
         | TT::GREATERTHANEQUAL
+        // Maybe raise precedence for comparisons?
         | TT::NOTEQUAL
         | TT::EQUAL => Precedence::Sum,
         // TT::EQ | TT::NE => Precedence::Equals,

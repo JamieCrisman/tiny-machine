@@ -6,16 +6,8 @@ use std::{
     vec::Drain,
 };
 
-use crate::{
-    code::{make, Opcode},
-    parser::{
-        ast::{
-            Expression, Identifier, Infix, Literal, Postfix, PostfixModifier, Prefix, Program,
-            Statement,
-        },
-        token::TokenType,
-    },
-};
+
+use crate::{code::{make, Opcode}, parser::{ast::{BlockStatement, Expression, Identifier, Infix, Literal, Postfix, PostfixModifier, Prefix, Program, Statement}, token::TokenType}};
 
 use self::symbol_table::SymbolTable;
 
@@ -28,11 +20,14 @@ pub struct Instructions {
 struct EmittedInstruction {
     op: Opcode,
     operands: Option<Vec<i32>>,
-    // position: usize,
+    position: usize,
 }
 
 pub struct CompilationScope {
     instructions: Vec<EmittedInstruction>,
+    // these let us hold a temporary value to modify later
+    last_instruction: Option<EmittedInstruction>,
+    previous_instruction: Option<EmittedInstruction>,
 }
 
 #[derive(Debug)]
@@ -69,11 +64,22 @@ impl Compiler {
             scope_index: 0,
             scopes: vec![CompilationScope {
                 instructions: vec![],
+                last_instruction: None,
+                previous_instruction: None,
             }],
         }
     }
 
     pub fn read(&mut self, program: Program) -> Result<(), CompileError> {
+        for s in program {
+            if let Err(e) = self.compile_statement(s) {
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn compile(&mut self, program: Vec<Statement>) -> Result<(), CompileError> {
         for s in program {
             if let Err(e) = self.compile_statement(s) {
                 return Err(e);
@@ -146,11 +152,11 @@ impl Compiler {
             Expression::Prefix(p, exp) => self.compile_prefix(p, *exp),
             Expression::Literal(literal) => self.compile_literal(literal),
             Expression::Postfix(p, exp) => self.compile_postfix(p, *exp),
-            // Expression::If {
-            //     condition,
-            //     consequence,
-            //     alternative,
-            // } => self.compile_if(condition, consequence, alternative),
+            Expression::If {
+                 condition,
+                 consequence,
+                 alternative,
+            } => self.compile_if(condition, consequence, alternative),
             Expression::Index(expr, ind_expr) => self.compile_index(*expr, *ind_expr),
             // Expression::Func { params, body, name } => self.compile_function(params, body, name),
             // Expression::Call { args, func } => self.compile_call(args, func),
@@ -233,6 +239,92 @@ impl Compiler {
         };
         Ok(())
     }
+    
+    fn compile_if(
+        &mut self,
+        condition: Box<Expression>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    ) -> Result<(), CompileError> {
+        self.compile_expression(*condition)?;
+        // this gets properly set later (back patching)
+        let jump_not_truthy_pos = self.emit(Opcode::JumpNotTruthy, Some(vec![9999]));
+        self.compile(consequence)?;
+
+        if self.last_instruction_is(Opcode::Pop) {
+            self.remove_last_pop();
+        }
+        // to be backpatched
+        let jump_pos = self.emit(Opcode::Jump, Some(vec![9999]));
+        //let after_consequence_pos = self.scopes[self.scope_index].instructions.len();
+        let after_consequence_pos = self.scope_to_byte_position();
+        self.change_operand(
+            jump_not_truthy_pos,
+            Some(vec![after_consequence_pos as i32]),
+        );
+
+        if alternative.is_none() {
+            self.emit(Opcode::Null, None);
+        } else {
+            self.compile(alternative.unwrap())?;
+
+            if self.last_instruction_is(Opcode::Pop) {
+                self.remove_last_pop();
+            }
+        }
+        // let after_alternative_pos = self.scopes[self.scope_index].instructions.len();
+        let after_alternative_pos = self.scope_to_byte_position();
+        self.change_operand(jump_pos, Some(vec![after_alternative_pos as i32]));
+
+        Ok(())
+    }
+    
+    fn change_operand(&mut self, opcode_pos: usize, operands: Option<Vec<i32>>) {
+        let op = &self.current_instructions().expect("expected instructions to exist")[opcode_pos];
+        self.replace_instruction(opcode_pos, EmittedInstruction { op: op.op.clone(), operands, position: op.position });
+    }
+
+    fn scope_to_byte_position(&self) -> i32 {
+        self.scopes[self.scope_index]
+            .instructions
+            .iter()
+            .fold(0_usize, |mut sum, x|{sum += x.op.operand_width(); sum+1}) as i32 
+    }
+
+    fn replace_instruction(&mut self, pos: usize, new_instruction: EmittedInstruction) {
+        self.scopes[self.scope_index].instructions[pos] = new_instruction;
+    }
+
+    fn last_instruction_is(&mut self, op: Opcode) -> bool {
+        self.scopes
+            .get(self.scope_index)
+            .unwrap()
+            .last_instruction
+            .is_some()
+            && self
+                .scopes
+                .get(self.scope_index)
+                .unwrap()
+                .last_instruction
+                .as_ref()
+                .unwrap()
+                .op
+                == op
+    }
+
+    fn remove_last_pop(&mut self) {
+        // self.instructions
+        let pos = self.scopes[self.scope_index]
+            .last_instruction
+            .as_ref()
+            .unwrap()
+            .position;
+        while self.scopes[self.scope_index].instructions.len() > pos {
+            self.scopes[self.scope_index].instructions.pop();
+        }
+        self.scopes[self.scope_index].last_instruction =
+            self.scopes[self.scope_index].previous_instruction.clone();
+    }
 
     fn compile_return(&mut self, e: Expression) -> Result<(), CompileError> {
         self.compile_expression(e)?;
@@ -246,14 +338,22 @@ impl Compiler {
             Some(instr) => instr.len(),
             None => 0,
         };
+        let recent_emit = EmittedInstruction{
+            op,
+            operands,
+            position: pos,
+        };
         self.scopes[self.scope_index]
             .instructions
-            .push(EmittedInstruction {
-                op,
-                operands,
-                // position: pos,
-            });
+            .push(recent_emit.clone());
+        self.set_last_instruction(recent_emit);
         pos
+    }
+
+    fn set_last_instruction(&mut self, last: EmittedInstruction) {
+        let prev = self.scopes.get(self.scope_index).unwrap().last_instruction.clone();
+        self.scopes[self.scope_index].previous_instruction = prev;
+        self.scopes[self.scope_index].last_instruction = Some(last);
     }
 
     fn add_constant(&mut self, obj: Object) -> usize {
@@ -589,5 +689,252 @@ impl fmt::Display for Object {
             //     num_locals, num_parameters
             // ),
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use std::vec;
+
+    // use crate::evaluator::builtins::new_builtins;
+    use crate::compiler::*;
+    use crate::parser;
+    use crate::parser::lexer::Lexer;
+
+    struct CompilerTestCase {
+        input: String,
+        expected_constants: Vec<Object>,
+        expected_instructions: Vec<Instructions>,
+    }
+
+
+    fn parse(input: String) -> parser::ast::Program {
+        let l = Lexer::new(input);
+        let mut p = parser::Parser::new(l);
+        p.build_ast()
+    }
+
+
+    #[test]
+    fn test_bool_arithmetic() {
+        let tests: Vec<CompilerTestCase> = vec![
+            CompilerTestCase {
+                input: "1 > 2".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(2.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::GreaterThan, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            CompilerTestCase {
+                input: "1 < 2".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(2.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::LessThan, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            CompilerTestCase {
+                input: "1 = 2".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(2.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::Equal, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            CompilerTestCase {
+                input: "1 != 2".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(2.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::NotEqual, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+        ];
+
+        run_compiler_test(tests);
+    }
+
+
+    #[test]
+    fn test_if_conditionals() {
+        let tests: Vec<CompilerTestCase> = vec![
+            CompilerTestCase {
+                input: "if (1) { 10 } else { 20 }; 3333;".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(10.0), Object::Number(20.0), Object::Number(3333.0)],
+                expected_instructions: vec![
+                    // 00
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    // 03
+                    make(Opcode::JumpNotTruthy, Some(vec![12])).unwrap(),
+                    // 06
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    // 09
+                    make(Opcode::Jump, Some(vec![15])).unwrap(),
+                    // 10
+                    make(Opcode::Constant, Some(vec![2])).unwrap(),
+                    // 13
+                    make(Opcode::Pop, None).unwrap(),
+                    // 14
+                    make(Opcode::Constant, Some(vec![3])).unwrap(),
+                    // 17
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            CompilerTestCase {
+                input: "if (1) { 10 }; 3333;".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(10.0), Object::Number(3333.0)],
+                expected_instructions: vec![
+                    // 00
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    // 03
+                    make(Opcode::JumpNotTruthy, Some(vec![12])).unwrap(),
+                    // 06
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    // 09
+                    make(Opcode::Jump, Some(vec![13])).unwrap(),
+                    // 12
+                    make(Opcode::Null, None).unwrap(),
+                    // 13
+                    make(Opcode::Pop, None).unwrap(),
+                    // 14
+                    make(Opcode::Constant, Some(vec![2])).unwrap(),
+                    // 15
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            // if(1) {2};
+            CompilerTestCase {
+                input: "if (1) { 2 };".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(2.0)],
+                expected_instructions: vec![
+                    // 00
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    // 03
+                    make(Opcode::JumpNotTruthy, Some(vec![12])).unwrap(),
+                    // 06
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    // 09
+                    make(Opcode::Jump, Some(vec![13])).unwrap(),
+                    // 10
+                    make(Opcode::Null, None).unwrap(),
+                    // 11
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+        ];
+
+        run_compiler_test(tests);
+    }
+
+    fn run_compiler_test(tests: Vec<CompilerTestCase>) {
+        for test in tests {
+            println!("testing {}", test.input);
+            let program = parse(test.input.clone());
+            //let st = SymbolTable::new();
+            //let constants = vec![];
+            let mut c = Compiler::new();
+            // println!("{:?}", program);
+            let compile_result = c.compile(program);
+            assert!(
+                compile_result.is_ok(),
+                "{:?}",
+                compile_result
+                    .err()
+                    .unwrap_or(CompileError::Reason("uh... not sure".to_string()))
+            );
+
+            let bytecode = c.bytecode();
+            // println!("{:?}", test.input);
+            let instruction_result =
+                test_instructions(test.expected_instructions, bytecode.instructions);
+            assert!(instruction_result.is_ok());
+
+            let constant_result = test_constants(test.expected_constants, bytecode.constants);
+            assert!(constant_result.is_ok());
+        }
+    }
+
+
+    fn test_instructions(
+        expected: Vec<Instructions>,
+        got: Instructions,
+    ) -> Result<(), CompileError> {
+        let concatted = concat_instructions(expected);
+        println!("len {}: {:?}", got.data.len(), got.data);
+        println!("len {}: {:?}", concatted.data.len(), concatted.data);
+        if got.data.len() != concatted.data.len() {
+            assert_eq!(concatted.data.len(), got.data.len());
+        }
+
+        println!("{:?}", got.data);
+        println!("{:?}", concatted.data);
+        for (i, ins) in concatted.data.iter().enumerate() {
+            assert_eq!(got.data.get(i).unwrap(), ins);
+            // if got.get(i).unwrap() != ins {
+            //     return Err(CompileError::Reason(format!(
+            //         "wrong instruction at {}, got: {:?} wanted: {:?}",
+            //         i, concatted, got
+            //     )));
+            // }
+        }
+
+        Ok(())
+    }
+
+    fn concat_instructions(expected: Vec<Instructions>) -> Instructions {
+        let mut out: Vec<u8> = vec![];
+        for e in expected {
+            for b in e.data {
+                out.push(b);
+            }
+        }
+        return Instructions { data: out };
+    }
+
+    fn test_constants(expected: Vec<Object>, got: Objects) -> Result<(), CompileError> {
+        assert_eq!(expected.len(), got.len());
+
+        for (i, c) in expected.iter().enumerate() {
+            match c {
+                Object::Number(v) => match got.get(i).unwrap() {
+                    Object::Number(v2) => assert_eq!(v, v2),
+                    _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
+                },
+            //    Object::String(s) => match got.get(i).unwrap() {
+            //        Object::String(s2) => assert_eq!(s, s2),
+            //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
+            //    },
+            //    Object::CompiledFunction {
+            //        instructions: Instructions { data },
+            //        num_locals,
+            //        num_parameters,
+            //    } => match got.get(i).unwrap() {
+            //        Object::CompiledFunction {
+            //            instructions: Instructions { data: data2 },
+            //            num_locals: locals2,
+            //            num_parameters: params2,
+            //        } => {
+            //            assert_eq!(data, data2);
+            //            assert_eq!(num_locals, locals2);
+            //            assert_eq!(num_parameters, params2);
+            //        }
+            //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
+            //    },
+                _ => {}
+            }
+        }
+
+        Ok(())
     }
 }

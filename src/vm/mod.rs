@@ -11,6 +11,8 @@ use self::frame::Frame;
 
 const DEFAULT_STACK_SIZE: usize = 2048;
 
+const NULL : Object = Object::Null;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VMError {
     Reason(String),
@@ -36,6 +38,14 @@ pub struct VM {
     time_per_op: HashMap<Opcode, Duration>,
     op_counts: HashMap<Opcode, u64>,
     halted: bool,
+}
+
+fn is_truthy(obj: Object) -> bool {
+    match obj {
+        Object::Number(n) => n != 0.0,
+        Object::Null => false, // ?
+        _ => true,
+    }
 }
 
 impl VM {
@@ -269,9 +279,37 @@ impl VM {
                 1
             }
             Opcode::Bang => {self.execute_bang_operator()?; 1} 
-            Opcode::Jump => todo!(),
-            Opcode::JumpNotTruthy => todo!(),
-            Opcode::Null => todo!(),
+            Opcode::Jump => {
+                let buff = [
+                    *cur_instructions.data.get(ip+1).expect("expected byte"),
+                    *cur_instructions.data.get(ip+2).expect("expected byte"),
+                ];
+                let jump_target = u16::from_be_bytes(buff);
+                self.set_ip(jump_target as i64-1);
+
+                // maybe lower cost?
+                4
+            }
+            Opcode::JumpNotTruthy => {
+                let buff = [
+                    *cur_instructions.data.get(ip+1).expect("expected byte"),
+                    *cur_instructions.data.get(ip+2).expect("expected byte"),
+                ];
+                let jump_target = u16::from_be_bytes(buff);
+                self.set_ip((ip+2) as i64);
+                let condition = self.pop();
+                if !is_truthy(condition) {
+                    self.set_ip((jump_target - 1) as i64);
+                }
+
+                // maybe lower cost?
+                4
+            },
+            Opcode::Null => {
+                // TODO: zero?
+                self.push(NULL)?;
+                1
+            },
             Opcode::Array => {
                 let buff = [
                     *cur_instructions.data.get(ip + 1).expect("expected byte"),
@@ -896,6 +934,38 @@ mod tests {
             expected_top: Some(Object::Number(21.0)),
             input: "a <- [1, 2, 3, 4, 5, 6]\\+;a".to_string(),
             expected_cycles: 24,
+        }];
+
+        run_vm_test(tests);
+    }
+
+
+    #[test]
+    fn test_if_statement() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(2.0)),
+            input: "if(1) {2};".to_string(),
+            expected_cycles: 13,
+        }, VMTestCase {
+            expected_top: Some(Object::Null),
+            input: "if(0) {2};".to_string(),
+            expected_cycles: 13,
+        }, VMTestCase {
+            expected_top: Some(Object::Number(2.0)),
+            input: "if(1) {2} else {3};".to_string(),
+            expected_cycles: 13,
+        }, VMTestCase {
+            expected_top: Some(Object::Number(3.0)),
+            input: "if(0) {2} else {3};".to_string(),
+            expected_cycles: 13,
+        },VMTestCase {
+            expected_top: Some(Object::Number(2.0)),
+            input: "if([0,0,0,1]\\+) {2} else {3};".to_string(),
+            expected_cycles: 26,
+        },VMTestCase {
+            expected_top: Some(Object::Number(3.0)),
+            input: "if([0,0,0,0]\\+) {2} else {3};".to_string(),
+            expected_cycles: 26,
         }];
 
         run_vm_test(tests);
