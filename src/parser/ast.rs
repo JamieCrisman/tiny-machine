@@ -26,7 +26,7 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Blank => write!(f, ""),
-            Self::Let(i, e) => write!(f, "let {} = {};", i.0, e),
+            Self::Let(i, e) => write!(f, "{} <- {};", i.0, e),
             Self::Return(e) => write!(f, "return {};", e),
             Self::Expression(e) => write!(f, "{}", e),
             // _ => write!(f, "D:"),
@@ -114,6 +114,7 @@ impl fmt::Display for Expression {
 pub enum Prefix {
     // Tally,
     Minus,
+    Bang,
     // Swap,
 }
 
@@ -121,6 +122,7 @@ impl fmt::Display for Prefix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Prefix::Minus => write!(f, "-"),
+            Prefix::Bang => write!(f, "-"),
             // Prefix::Swap => write!(f, "⍨"),
             // Prefix::Tally => write!(f, "≢"),
         }
@@ -173,6 +175,7 @@ pub enum Infix {
     And,
     Or,
     Equal,
+    NotEqual,
     LessThan,
     GreaterThan,
     LessThanEqual,
@@ -203,6 +206,7 @@ impl fmt::Display for Infix {
             Infix::GreaterThan => write!(f, ">"),
             Infix::GreaterThanEqual => write!(f, "≥"),
             Infix::Equal => write!(f, "="),
+            Infix::NotEqual => write!(f, "!="),
             Infix::LessThan => write!(f, "<"),
             Infix::LessThanEqual => write!(f, "≤"),
             // Infix::Reduce => write!(f, "\\"),
@@ -269,12 +273,14 @@ pub fn precedence_of(t: TT) -> Precedence {
         | TT::LESSTHANEQUAL
         | TT::GREATERTHAN
         | TT::GREATERTHANEQUAL
+        | TT::NOTEQUAL
         | TT::EQUAL => Precedence::Sum,
         // TT::EQ | TT::NE => Precedence::Equals,
         TT::ASTERISK | TT::SLASH => Precedence::Sum,
         // TT::LT | TT::GT => Precedence::LessGreater,
         // TT::LTE | TT::GTE => Precedence::LessGreater,
         // TT::TALLY => Precedence::Prefix,
+        TT::BANG => Precedence::Prefix,
         TT::REDUCE => Precedence::Product,
         TT::LBRACKET => Precedence::Index,
         TT::LPAREN => Precedence::Call,

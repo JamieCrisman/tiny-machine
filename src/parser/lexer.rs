@@ -113,15 +113,15 @@ impl Lexer {
                 // '|' => TT::MAGMOD,
                 '∧' => TT::AND,
                 '∨' => TT::OR,
-                // '!' => {
-                //     let peeked = self.peek_char();
-                //     if peeked.is_some() && peeked.unwrap() == '=' {
-                //         self.read_char();
-                //         TT::NE
-                //     } else {
-                //         TT::BANG
-                //     }
-                // }
+                '!' => {
+                     let peeked = self.peek_char();
+                     if peeked.is_some() && peeked.unwrap() == '=' {
+                         self.read_char();
+                         TT::NOTEQUAL
+                     } else {
+                         TT::BANG
+                     }
+                }
                 // '>' => TT::GREATERTHAN,
                 // '≥' => TT::GREATERTHANEQUAL,
                 '>' => {

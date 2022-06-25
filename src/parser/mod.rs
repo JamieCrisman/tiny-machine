@@ -156,7 +156,8 @@ impl Parser {
             TokenType::BOOL(_) => self.parse_bool_expr(),
             TokenType::LBRACKET => self.parse_array_ident_expr(),
             // TokenType::LBRACE => self.parse_hash_expr(),
-            TokenType::MINUS => self.parse_prefix_expression(),
+            TokenType::BANG
+            | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::LPAREN => self.parse_grouped_expr(),
             // TokenType::IF => self.parse_if_expression(),
             // TokenType::FUNCTION => self.parse_func_expression(),
@@ -180,6 +181,7 @@ impl Parser {
                 | TokenType::AND
                 | TokenType::OR
                 | TokenType::EQUAL
+                | TokenType::NOTEQUAL
                 | TokenType::LESSTHAN
                 | TokenType::LESSTHANEQUAL
                 | TokenType::GREATERTHAN
@@ -431,6 +433,7 @@ impl Parser {
             TokenType::AND => Some(Infix::And),
             TokenType::OR => Some(Infix::Or),
             TokenType::EQUAL => Some(Infix::Equal),
+            TokenType::NOTEQUAL => Some(Infix::NotEqual),
             TokenType::GREATERTHAN => Some(Infix::GreaterThan),
             TokenType::GREATERTHANEQUAL => Some(Infix::GreaterThanEqual),
             TokenType::LESSTHAN => Some(Infix::LessThan),
@@ -477,6 +480,7 @@ impl Parser {
             | TokenType::AND
             | TokenType::OR
             | TokenType::EQUAL
+            | TokenType::NOTEQUAL
             | TokenType::LESSTHAN
             | TokenType::LESSTHANEQUAL
             | TokenType::GREATERTHAN
@@ -618,6 +622,7 @@ impl Parser {
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
         let prefix = match self.cur_token_type {
             // TokenType::TALLY => Prefix::Tally,
+            TokenType::BANG => Prefix::Bang,
             TokenType::MINUS => Prefix::Minus,
             _ => return None,
         };

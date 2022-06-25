@@ -150,7 +150,7 @@ impl VM {
             .expect("expected instructions");
         let op = Opcode::from(*cur_instructions.data.get(ip).expect("expected byte"));
         // let op = unsafe { Opcode::from(*cur_instructions.data.get_unchecked(ip)) };
-        // println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
+        println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
         // println!("{:?}", cur_instructions.data);
         let result: u8 = match op {
             // Opcode::NoOp => 1,
@@ -257,8 +257,8 @@ impl VM {
             | Opcode::LessThanEqual
             | Opcode::GreaterThan
             | Opcode::GreaterThanEqual
+            | Opcode::NotEqual
             | Opcode::Equal => {
-                
                 self.execute_binary_operation(op.clone())?
             }
             Opcode::True => todo!(),
@@ -268,7 +268,7 @@ impl VM {
                 // TODO: figure out how to reduce this cost without allowing things to loop forever?
                 1
             }
-            Opcode::Bang => todo!(),
+            Opcode::Bang => {self.execute_bang_operator()?; 1} 
             Opcode::Jump => todo!(),
             Opcode::JumpNotTruthy => todo!(),
             Opcode::Null => todo!(),
@@ -297,7 +297,6 @@ impl VM {
             Opcode::GetLocal => todo!(),
             Opcode::SetLocal => todo!(),
             Opcode::Reduce => self.execute_reduce_operation()?,
-            Opcode::NotEqual => todo!(),
         };
 
         if self.debug {
@@ -324,6 +323,13 @@ impl VM {
                 SymbolType::SLASH => Ok(Object::Number(an / bn)),
                 SymbolType::AND => Ok(Object::Number(an * bn)),
                 SymbolType::OR => Ok(Object::Number((an + bn) - (an * bn))),
+                SymbolType::NOTEQUAL => {
+                    if f64::abs(an - bn) > f64::EPSILON {
+                        Ok(Object::Number(1.0))
+                    } else {
+                        Ok(Object::Number(0.0))
+                    }
+                }
                 SymbolType::EQUAL => {
                     if f64::abs(an - bn) < f64::EPSILON {
                         Ok(Object::Number(1.0))
@@ -461,6 +467,7 @@ impl VM {
             Opcode::And => SymbolType::AND,
             Opcode::Or => SymbolType::OR,
             Opcode::Equal => SymbolType::EQUAL,
+            Opcode::NotEqual => SymbolType::NOTEQUAL,
             Opcode::LessThan => SymbolType::LESSTHAN,
             Opcode::LessThanEqual => SymbolType::LESSTHANEQUAL,
             Opcode::GreaterThan => SymbolType::GREATERTHAN,
@@ -577,6 +584,42 @@ impl VM {
         }
     }
 
+    fn is_not_zero(arr: Vec<Object>) -> Vec<Object> {
+        let result : Vec<Object> = arr.iter().map(|obj| {
+            match obj {
+                Object::Number(n) => {
+                    if n.to_owned() == 0.0 {
+                        Object::Number(1.0)
+                    } else {
+                        Object::Number(0.0)
+                    }
+                },
+                Object::Array(ar) => Object::Array(VM::is_not_zero(ar.to_owned())),
+                _ => Object::Number(0.0)
+            }
+        }).collect::<Vec<Object>>();
+        
+        return result
+    }
+
+    fn execute_bang_operator(&mut self) -> Result<(), VMError> {
+        let op = self.pop();
+
+        match op {
+            Object::Number(n) => {
+                if n == 0.0 {
+                    self.push(Object::Number(1.0))
+                } else {
+                    self.push(Object::Number(0.0))
+                }
+            },
+            Object::Array(arr) => {
+                self.push(Object::Array(VM::is_not_zero(arr)))
+            }
+            Object::Null => self.push(Object::Number(1.0)),
+            _ => self.push(Object::Number(0.0)),
+        }
+    }
     fn execute_minus_operator(&mut self) -> Result<(), VMError> {
         let op = self.pop();
 
@@ -865,6 +908,74 @@ mod tests {
             input: "-10".to_string(),
             expected_cycles: 4,
         }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_bang() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "!1".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "!0".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "a<-1;!a".to_string(),
+                expected_cycles: 9,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(0.0),
+                    Object::Number(1.0),
+                    Object::Number(0.0),
+                ])),
+                input: "![-10, 0, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+    #[test]
+    fn test_not_equal_operator() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10.5!=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "10!=10".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(1.0)),
+                input: "10!=10.5".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(0.0)),
+                input: "(0.1+0.2)!=0.3".to_string(),
+                expected_cycles: 11,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Array(vec![
+                    Object::Number(0.0),
+                    Object::Number(1.0),
+                    Object::Number(1.0),
+                ])),
+                input: "[-10, 1, 4]!=[-10, 4, 1]".to_string(),
+                expected_cycles: 25,
+            },
+        ];
 
         run_vm_test(tests);
     }

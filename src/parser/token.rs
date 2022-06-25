@@ -14,14 +14,8 @@ pub enum TokenType {
     ASTERISK,
     SLASH,
 
-    // Less,
-    // LessEqual,
-    // Greater,
-    // GreaterEqual,
-    // Equal,
     // EqualEqual
-    // BANG,
-    // BangEqual,
+    BANG,
     COMMA,
     // COLON,
     SEMICOLON,
@@ -29,8 +23,8 @@ pub enum TokenType {
     ASSIGN, // <-
     LPAREN,
     RPAREN,
-    // LBRACE,
-    // RBRACE,
+    //LBRACE,
+    //RBRACE,
     LBRACKET,
     RBRACKET,
     // FUNCTION,
@@ -54,6 +48,7 @@ pub enum TokenType {
     LESSTHAN,
     LESSTHANEQUAL,
     EQUAL,
+    NOTEQUAL,
 }
 
 #[derive(PartialEq, Clone, Debug)]

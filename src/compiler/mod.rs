@@ -196,6 +196,7 @@ impl Compiler {
             Infix::And => self.emit(Opcode::And, None),
             Infix::Or => self.emit(Opcode::Or, None),
             Infix::Equal => self.emit(Opcode::Equal, None),
+            Infix::NotEqual => self.emit(Opcode::NotEqual, None),
             Infix::LessThan => self.emit(Opcode::LessThan, None),
             Infix::LessThanEqual => self.emit(Opcode::LessThanEqual, None),
             Infix::GreaterThan => self.emit(Opcode::GreaterThan, None),
@@ -212,8 +213,8 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         self.compile_expression(exp)?;
         match prefix {
+            Prefix::Bang => self.emit(Opcode::Bang, None),
             Prefix::Minus => self.emit(Opcode::Minus, None),
-            // Prefix::Swap =>
         };
         Ok(())
     }
@@ -422,6 +423,7 @@ pub enum SymbolType {
     AND,
     OR,
     EQUAL,
+    NOTEQUAL,
     LESSTHAN,
     LESSTHANEQUAL,
     GREATERTHAN,
