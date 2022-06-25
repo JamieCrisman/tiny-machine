@@ -899,7 +899,7 @@ mod tests {
                 out.push(b);
             }
         }
-        return Instructions { data: out };
+        Instructions { data: out }
     }
 
     fn test_constants(expected: Vec<Object>, got: Objects) -> Result<(), CompileError> {

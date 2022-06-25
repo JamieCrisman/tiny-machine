@@ -626,7 +626,7 @@ impl VM {
         let result : Vec<Object> = arr.iter().map(|obj| {
             match obj {
                 Object::Number(n) => {
-                    if n.to_owned() == 0.0 {
+                    if *n == 0.0 {
                         Object::Number(1.0)
                     } else {
                         Object::Number(0.0)
@@ -637,7 +637,7 @@ impl VM {
             }
         }).collect::<Vec<Object>>();
         
-        return result
+        result
     }
 
     fn execute_bang_operator(&mut self) -> Result<(), VMError> {
