@@ -66,8 +66,14 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.peek_token_type {
             TokenType::ASSIGN => self.parse_let_statement(),
+            TokenType::WHILE => self.parse_while_statement(),
             // TokenType::RETURN => self.parse_return_statement(),
-            _ => self.parse_expression_statement(),
+            _ => {
+                match self.cur_token_type {
+                    TokenType::WHILE => self.parse_while_statement(),
+                    _ => self.parse_expression_statement(),
+                }
+            } 
         }
     }
 
@@ -137,7 +143,7 @@ impl Parser {
             // TODO:
             // self.errorserrors
             self.errors.push(format!(
-                "could not parse assign statement: '{}'",
+                "could not parse expression statement: '{}'",
                 self.cur_token.as_ref().unwrap().lexeme,
                 // self.cur_token.as_ref().unwrap().line
             ));
@@ -160,7 +166,8 @@ impl Parser {
             | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::LPAREN => self.parse_grouped_expr(),
             TokenType::IF => self.parse_if_expression(),
-            TokenType::WHILE => self.parse_while_expression(),
+            //TokenType::WHILE => self.parse_while_expression(),
+            TokenType::PISET => self.parse_piset_expression(),
             // TokenType::FUNCTION => self.parse_func_expression(),
             _ => {
                 // self.error_no_prefix_Parser();
@@ -308,36 +315,47 @@ impl Parser {
         Some(Expression::Index(Box::new(left), Box::new(index)))
     }
 
-    // fn parse_func_params(&mut self) -> Option<Vec<Ident>> {
-    //     let mut params = vec![];
-    //     if self.peek_token == TokenType::RPAREN {
-    //         self.next_token();
-    //         return Some(params);
-    //     }
+    fn parse_piset_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+        let params = self.parse_func_params();
+        if params.is_none() || params.as_ref().unwrap().len() != 4 {
+            self.errors.push(format!("piset was called with {} params, instead of the expected {}", params.unwrap_or(vec![]).len(), 4));
+            return None;
+        }
 
-    //     self.next_token();
+       Some(Expression::Piset{params: params.unwrap()})
+    }
 
-    //     match self.parse_ident() {
-    //         Some(ident) => params.push(ident),
-    //         None => return None,
-    //     }
+     fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
+         let mut params = vec![];
+         if self.peek_token_type == TokenType::RPAREN {
+             self.next_token();
+             return Some(params);
+         }
 
-    //     while self.peek_token == TokenType::COMMA {
-    //         self.next_token();
-    //         self.next_token();
+         self.next_token();
 
-    //         match self.parse_ident() {
-    //             Some(ident) => params.push(ident),
-    //             None => return None,
-    //         }
-    //     }
+         match self.parse_expression(Precedence::Lowest) {
+             Some(exp) => params.push(exp),
+             None => return None,
+         }
 
-    //     if !self.expect_peek(TokenType::RPAREN) {
-    //         return None;
-    //     }
+         while self.peek_token_type == TokenType::COMMA {
+             self.next_token();
+             self.next_token();
 
-    //     Some(params)
-    // }
+             match self.parse_expression(Precedence::Lowest) {
+                 Some(exp) => params.push(exp),
+                 None => return None,
+             }
+         }
+
+         if !self.expect_peek(TokenType::RPAREN) {
+             return None;
+         }
+
+         Some(params)
+     }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut list = vec![];
@@ -386,7 +404,7 @@ impl Parser {
      }
 
 
-     fn parse_while_expression(&mut self) -> Option<Expression> {
+     fn parse_while_statement(&mut self) -> Option<Statement> {
          if !self.expect_peek(TokenType::LPAREN) {
              return None;
          }
@@ -404,10 +422,7 @@ impl Parser {
 
          let body = self.parse_block_statement();
 
-         Some(Expression::While {
-             condition: Box::new(cond),
-             body,
-         })
+         Some(Statement::While(cond, body))
      }
 
      fn parse_if_expression(&mut self) -> Option<Expression> {
@@ -758,6 +773,28 @@ mod tests {
             Box::new(Expression::Literal(Literal::Number(10.0))),
             Box::new(Expression::Literal(Literal::Number(2.0))),
         ))];
+
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
+
+    #[test]
+    fn test_piset() {
+        let input = String::from("piset(1,2,3,4)");
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::Piset{
+            params: vec![
+                Expression::Literal(Literal::Number(1.0)),
+                Expression::Literal(Literal::Number(2.0)),
+                Expression::Literal(Literal::Number(3.0)),
+                Expression::Literal(Literal::Number(4.0)),
+            ]
+        })];
 
         assert_eq!(errors.len(), 0, "{:?}", errors);
 

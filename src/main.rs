@@ -78,7 +78,7 @@ struct Machine {
 
 impl Machine {
     fn new(mut pixels: Pixels, bc: compiler::Bytecode, gui: gui::Gui, debug: bool) -> Self {
-        let vm = VM::flash(bc, pixels.get_frame().len() / 4, debug);
+        let vm = VM::flash(bc, WIDTH as usize, HEIGHT as usize, pixels.get_frame().len() / 4, debug);
         Self {
             pixels,
             // controls: Controls::default(),
@@ -272,7 +272,7 @@ fn main() -> Result<(), SessionError> {
     }
 
     let gui = Gui::new(&window, &pixels);
-
+    println!("is debug? {}", debug);
     let machine = Machine::new(pixels, compiler.bytecode(), gui, debug);
 
     game_loop(
@@ -290,7 +290,7 @@ fn main() -> Result<(), SessionError> {
             let start = Instant::now();
             while emulated_cycles <= CYCLES_PER_FRAME
                 && !g.game.vm.halted()
-                && start.elapsed().as_secs_f32() < (TIME_STEP.as_secs_f32())
+                && start.elapsed() < TIME_STEP
             {
                 match g.game.vm.execute() {
                     Ok(step) => {
@@ -299,6 +299,7 @@ fn main() -> Result<(), SessionError> {
                     Err(err) => panic!("error on execution: {:?}", err),
                 }
             }
+            
             g.game.gui.set_stats(
                 start.elapsed(),
                 emulated_cycles,
@@ -312,10 +313,6 @@ fn main() -> Result<(), SessionError> {
         },
         move |g| {
             let _render_time = Instant::now();
-
-            if Time::now().sub(&g.current_instant()) > TIME_STEP.as_secs_f64() {
-                return;
-            }
 
             g.game.gui.prepare(&g.window).expect("gui.prepare() failed");
             // Drawing

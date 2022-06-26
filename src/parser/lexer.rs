@@ -163,6 +163,8 @@ impl Lexer {
                             "while" => TT::WHILE,
                             "if" => TT::IF,
                             "else" => TT::ELSE,
+                            "piset" => TT::PISET,
+                            // "piget" => TT::PIGET,
                         //    "return" => Token::RETURN,
                             _ => TT::IDENTIFIER(literal),
                         }

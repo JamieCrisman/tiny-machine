@@ -20,6 +20,8 @@ pub enum Statement {
     Let(Identifier, Expression),
     Return(Expression),
     Expression(Expression),
+    While(Expression, BlockStatement),
+    //If(Expression, BlockStatement, Option<BlockStatement>),
 }
 
 impl fmt::Display for Statement {
@@ -29,6 +31,8 @@ impl fmt::Display for Statement {
             Self::Let(i, e) => write!(f, "{} <- {};", i.0, e),
             Self::Return(e) => write!(f, "return {};", e),
             Self::Expression(e) => write!(f, "{}", e),
+            //Self::If(e,b,bc) => write!(f, "{} {:?} {:?}", e, b, bc),
+            Self::While(e, b) => write!(f, "{} {:?}", e, b),
             // _ => write!(f, "D:"),
         }
     }
@@ -48,9 +52,13 @@ pub enum Expression {
          consequence: BlockStatement,
          alternative: Option<BlockStatement>,
     },
-    While {
-        condition: Box<Expression>,
-        body: BlockStatement,
+    //While {
+    //    condition: Box<Expression>,
+    //    body: BlockStatement,
+    //},
+    // TODO: generalize this
+    Piset {
+        params: Vec<Expression>,
     }
     // Func {
     //     params: Vec<Ident>,
@@ -78,24 +86,27 @@ impl fmt::Display for Expression {
             Self::Infix(i, e1, e2) => {
                 write!(f, "({} {} {})", e1, i, e2)
             } // _ => write!(f, "D:"),
-            Self::While {
-                 condition: _,
-                 body: _,
-             } => {
-                 write!(
-                     f,
-                     "TODO // Can't implement display for Vec, need to wrap it"
-                 )
-                 //                if (alternative.is_some()) {
-                 //                    write!(
-                 //                        f,
-                 //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
-                 //                        condition, consequence, alternative
-                 //                    )
-                 //                } else {
-                 //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
-                 //                }
-             }
+            Self::Piset{params} => {
+                write!(f, "piset({:?})", params)
+            }
+            //Self::While {
+            //     condition: _,
+            //     body: _,
+            // } => {
+            //     write!(
+            //         f,
+            //         "TODO // Can't implement display for Vec, need to wrap it"
+            //     )
+            //     //                if (alternative.is_some()) {
+            //     //                    write!(
+            //     //                        f,
+            //     //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
+            //     //                        condition, consequence, alternative
+            //     //                    )
+            //     //                } else {
+            //     //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
+            //     //                }
+            // }
             Self::If {
                  condition: _,
                  consequence: _,
@@ -113,7 +124,7 @@ impl fmt::Display for Expression {
                  //                    )
                  //                } else {
                  //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
-                 //                }
+           //      //                }
              }
             // Self::Func {
             //     params: _,

@@ -50,6 +50,8 @@ pub enum TokenType {
     EQUAL,
     NOTEQUAL,
     WHILE,
+    PISET,
+    PIGET,
 }
 
 #[derive(PartialEq, Clone, Debug)]

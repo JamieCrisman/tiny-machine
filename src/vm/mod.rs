@@ -24,6 +24,8 @@ pub struct Palette {
 
 pub struct VM {
     screen: Vec<u8>,
+    screen_width: usize,
+    screen_height: usize,
     frames: Vec<Frame>,
     frames_index: usize,
     stack: Objects,
@@ -49,7 +51,7 @@ fn is_truthy(obj: Object) -> bool {
 }
 
 impl VM {
-    pub fn flash(bytecode: Bytecode, screen_size: usize, debug: bool) -> Self {
+    pub fn flash(bytecode: Bytecode, screen_width: usize, screen_height: usize, screen_size: usize, debug: bool) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
@@ -57,6 +59,8 @@ impl VM {
             op_counts: HashMap::new(),
             time_per_op: HashMap::new(),
             screen: vec![0; screen_size],
+            screen_width,
+            screen_height,
             frames,
             frames_index: 1,
             stack: Objects::with_capacity(DEFAULT_STACK_SIZE),
@@ -129,7 +133,7 @@ impl VM {
             return Ok(1)
         }
 
-        println!("instructions: {:?}",self.current_frame().instructions().expect("stuff").data);
+        // println!("instructions: {:?}",self.current_frame().instructions().expect("stuff").data);
 
         if self.current_frame().ip
             >= (self
@@ -162,7 +166,7 @@ impl VM {
             .expect("expected instructions");
         let op = Opcode::from(*cur_instructions.data.get(ip).expect("expected byte"));
         // let op = unsafe { Opcode::from(*cur_instructions.data.get_unchecked(ip)) };
-        println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
+        // println!(" ------- got opcode: {:?} ip: {} sp: {}", op, ip, self.sp);
         // println!("{:?}", cur_instructions.data);
         let result: u8 = match op {
             // Opcode::NoOp => 1,
@@ -244,7 +248,6 @@ impl VM {
                 ];
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
-                println!("getting index: {}", &global_index);
                 let val: Object = self.globals.get(global_index as usize).unwrap().clone();
                 self.push(val)?;
                 2
@@ -257,7 +260,6 @@ impl VM {
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
-                println!("setting index: {}", &global_index);
                 self.globals.insert(global_index as usize, pop);
                 2
             }
@@ -292,7 +294,7 @@ impl VM {
                 self.set_ip(jump_target as i64-1);
 
                 // maybe lower cost?
-                4
+                2
             }
             Opcode::JumpNotTruthy => {
                 let buff = [
@@ -308,17 +310,6 @@ impl VM {
 
                 // maybe lower cost?
                 4
-            },
-            Opcode::LoopStart => {
-                let buff = [
-                    *cur_instructions.data.get(ip+1).expect("expected byte"),
-                    *cur_instructions.data.get(ip+2).expect("expected byte"),
-                ];
-                let jump_target = u16::from_be_bytes(buff);
-                self.set_ip(jump_target as i64-1);
-
-                // maybe lower cost?
-                2
             },
             Opcode::Null => {
                 // TODO: zero?
@@ -350,6 +341,10 @@ impl VM {
             Opcode::GetLocal => todo!(),
             Opcode::SetLocal => todo!(),
             Opcode::Reduce => self.execute_reduce_operation()?,
+            Opcode::Piset => {
+                self.execute_piset()?;
+                1
+            },
         };
 
         if self.debug {
@@ -705,6 +700,40 @@ impl VM {
         self.last_popped = Some(val.clone());
         self.sp -= 1;
         val
+    }
+
+    fn execute_piset(&mut self) -> Result<(), VMError> {
+        let pal = self.pop();
+        let color = self.pop();
+        let y = self.pop();
+        let x = self.pop();
+
+        let xval = match x {
+            Object::Number(n) => n as usize,
+            v => return Err(VMError::Reason(format!("invalid x value for piset {:?}", v)))
+        };
+
+        let yval = match y {
+            Object::Number(n) => n as usize,
+            v => return Err(VMError::Reason(format!("invalid y value for piset {:?}", v)))
+        };
+
+        let colorval = match color {
+            Object::Number(n) => n as u8 & 0b0000_1111,
+            v => return Err(VMError::Reason(format!("invalid color value for piset {:?}", v)))
+        };
+
+
+        let paletteval = match pal {
+            Object::Number(n) => n as u8 & 0b0000_1111,
+            v => return Err(VMError::Reason(format!("invalid palette value for piset {:?}", v)))
+        };
+
+        
+       let pixel = (paletteval << 4) + colorval;
+       self.screen[self.screen_width * yval + xval] = pixel;
+    
+        Ok(())
     }
 
     pub fn update_screen(&mut self, screen: &mut [u8]) {
@@ -1329,7 +1358,7 @@ mod tests {
             let compile_result = c.read(ast);
             assert!(compile_result.is_ok());
 
-            let mut vmm = VM::flash(c.bytecode(), 0, false);
+            let mut vmm = VM::flash(c.bytecode(), 0, 0, 0, false);
             let mut cycles = 0;
             while cycles < test.expected_cycles {
                 let result = vmm.execute();
