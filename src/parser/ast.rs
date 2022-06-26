@@ -48,6 +48,10 @@ pub enum Expression {
          consequence: BlockStatement,
          alternative: Option<BlockStatement>,
     },
+    While {
+        condition: Box<Expression>,
+        body: BlockStatement,
+    }
     // Func {
     //     params: Vec<Ident>,
     //     body: BlockStatement,
@@ -74,7 +78,25 @@ impl fmt::Display for Expression {
             Self::Infix(i, e1, e2) => {
                 write!(f, "({} {} {})", e1, i, e2)
             } // _ => write!(f, "D:"),
-             Self::If {
+            Self::While {
+                 condition: _,
+                 body: _,
+             } => {
+                 write!(
+                     f,
+                     "TODO // Can't implement display for Vec, need to wrap it"
+                 )
+                 //                if (alternative.is_some()) {
+                 //                    write!(
+                 //                        f,
+                 //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
+                 //                        condition, consequence, alternative
+                 //                    )
+                 //                } else {
+                 //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
+                 //                }
+             }
+            Self::If {
                  condition: _,
                  consequence: _,
                  alternative: _,

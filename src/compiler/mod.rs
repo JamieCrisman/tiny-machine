@@ -157,6 +157,10 @@ impl Compiler {
                  consequence,
                  alternative,
             } => self.compile_if(condition, consequence, alternative),
+            Expression::While {
+                 condition,
+                 body,
+            } => self.compile_while(condition, body),
             Expression::Index(expr, ind_expr) => self.compile_index(*expr, *ind_expr),
             // Expression::Func { params, body, name } => self.compile_function(params, body, name),
             // Expression::Call { args, func } => self.compile_call(args, func),
@@ -237,6 +241,33 @@ impl Compiler {
             },
             // _ => 0,
         };
+        Ok(())
+    }
+
+    fn compile_while(
+        &mut self,
+        condition: Box<Expression>,
+        body: BlockStatement,
+    ) -> Result<(), CompileError> {
+        let condition_start = self.scope_to_byte_position();
+        self.compile_expression(*condition)?;
+        // this gets properly set later (back patching)
+        let jump_not_truthy_pos = self.emit(Opcode::JumpNotTruthy, Some(vec![9999]));
+        self.compile(body)?;
+        if self.last_instruction_is(Opcode::Pop) {
+            self.remove_last_pop();
+        }
+
+        self.emit(Opcode::LoopStart, Some(vec![condition_start]));
+        
+        let after_body_pos = self.scope_to_byte_position();
+        self.change_operand(
+            jump_not_truthy_pos,
+            Some(vec![after_body_pos as i32]),
+        );
+        // emit pop?
+        self.emit(Opcode::Null, None); // TODO:???
+
         Ok(())
     }
     
@@ -716,6 +747,37 @@ mod tests {
         p.build_ast()
     }
 
+    #[test]
+    fn test_assignment() {
+        let tests: Vec<CompilerTestCase> = vec![
+            CompilerTestCase {
+                input: "a <- 1;a".to_string(),
+                expected_constants: vec![Object::Number(1.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            CompilerTestCase {
+                input: "a <- 1;a <- a + 1; a".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(1.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::Add, None).unwrap(),
+                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+        ];
+
+        run_compiler_test(tests);
+    }
 
     #[test]
     fn test_bool_arithmetic() {
@@ -765,6 +827,50 @@ mod tests {
         run_compiler_test(tests);
     }
 
+
+    #[test]
+    fn test_while_loop() {
+        let tests: Vec<CompilerTestCase> = vec![
+            CompilerTestCase {
+                input: "while (1) { 25 }".to_string(),
+                expected_constants: vec![Object::Number(1.0), Object::Number(25.0) ],
+                expected_instructions: vec![
+                    // 00
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    // 03
+                    make(Opcode::JumpNotTruthy, Some(vec![12])).unwrap(),
+                    // 06
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    // 09
+                    make(Opcode::LoopStart, Some(vec![0])).unwrap(),
+                    // 10
+                    make(Opcode::Null, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                    // 14
+                ],
+            },
+            CompilerTestCase {
+                input: "a <- 0; while (a < 10) { a <- 10 };".to_string(),
+                expected_constants: vec![Object::Number(0.0), Object::Number(10.0), Object::Number(10.0)],
+                expected_instructions: vec![
+                    make(Opcode::Constant, Some(vec![0])).unwrap(),
+                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::Constant, Some(vec![1])).unwrap(),
+                    make(Opcode::LessThan, None).unwrap(),
+                    make(Opcode::JumpNotTruthy, Some(vec![25])).unwrap(),
+                    make(Opcode::Constant, Some(vec![2])).unwrap(),
+                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
+                    make(Opcode::LoopStart, Some(vec![6])).unwrap(),
+                    make(Opcode::Null, None).unwrap(),
+                    make(Opcode::Pop, None).unwrap(),
+                ],
+            },
+            
+        ];
+
+        run_compiler_test(tests);
+    }
 
     #[test]
     fn test_if_conditionals() {

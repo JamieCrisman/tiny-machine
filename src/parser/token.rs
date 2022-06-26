@@ -49,6 +49,7 @@ pub enum TokenType {
     LESSTHANEQUAL,
     EQUAL,
     NOTEQUAL,
+    WHILE,
 }
 
 #[derive(PartialEq, Clone, Debug)]

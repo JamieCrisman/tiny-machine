@@ -129,6 +129,8 @@ impl VM {
             return Ok(1)
         }
 
+        println!("instructions: {:?}",self.current_frame().instructions().expect("stuff").data);
+
         if self.current_frame().ip
             >= (self
                 .current_frame()
@@ -242,6 +244,7 @@ impl VM {
                 ];
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
+                println!("getting index: {}", &global_index);
                 let val: Object = self.globals.get(global_index as usize).unwrap().clone();
                 self.push(val)?;
                 2
@@ -254,6 +257,7 @@ impl VM {
                 let global_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
+                println!("setting index: {}", &global_index);
                 self.globals.insert(global_index as usize, pop);
                 2
             }
@@ -304,6 +308,17 @@ impl VM {
 
                 // maybe lower cost?
                 4
+            },
+            Opcode::LoopStart => {
+                let buff = [
+                    *cur_instructions.data.get(ip+1).expect("expected byte"),
+                    *cur_instructions.data.get(ip+2).expect("expected byte"),
+                ];
+                let jump_target = u16::from_be_bytes(buff);
+                self.set_ip(jump_target as i64-1);
+
+                // maybe lower cost?
+                2
             },
             Opcode::Null => {
                 // TODO: zero?
@@ -972,6 +987,25 @@ mod tests {
     }
 
     #[test]
+    fn test_while_loop(){
+        // "a <- 0; while (a < 10) { a <- 10 };"
+
+        let tests: Vec<VMTestCase> = vec![
+        VMTestCase {
+            expected_top: Some(Object::Number(10.0)),
+            input: "a <- 0; while (a < 10) { a <- a + 1 };a".to_string(),
+            expected_cycles: 330,
+        },
+        VMTestCase {
+            expected_top: Some(Object::Number(100.0)),
+            input: "a <- 0; while (a < 10) { a <- 100 };a".to_string(),
+            expected_cycles: 35,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
     fn test_negative_number() {
         let tests: Vec<VMTestCase> = vec![VMTestCase {
             expected_top: Some(Object::Number(-10.0)),
@@ -1241,6 +1275,10 @@ mod tests {
             expected_top: Some(Object::Number(10.0)),
             input: "a <- 10; a".to_string(),
             expected_cycles: 7,
+        },VMTestCase {
+            expected_top: Some(Object::Number(11.0)),
+            input: "a <- 10; a <- a + 1; a;".to_string(),
+            expected_cycles: 25,
         }];
 
         run_vm_test(tests);

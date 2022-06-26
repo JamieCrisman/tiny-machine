@@ -160,6 +160,7 @@ impl Parser {
             | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::LPAREN => self.parse_grouped_expr(),
             TokenType::IF => self.parse_if_expression(),
+            TokenType::WHILE => self.parse_while_expression(),
             // TokenType::FUNCTION => self.parse_func_expression(),
             _ => {
                 // self.error_no_prefix_Parser();
@@ -382,6 +383,31 @@ impl Parser {
          }
 
          block
+     }
+
+
+     fn parse_while_expression(&mut self) -> Option<Expression> {
+         if !self.expect_peek(TokenType::LPAREN) {
+             return None;
+         }
+
+         self.next_token();
+
+         let cond = match self.parse_expression(Precedence::Lowest) {
+             Some(expr) => expr,
+             None => return None,
+         };
+
+         if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
+             return None;
+         }
+
+         let body = self.parse_block_statement();
+
+         Some(Expression::While {
+             condition: Box::new(cond),
+             body,
+         })
      }
 
      fn parse_if_expression(&mut self) -> Option<Expression> {

@@ -63,6 +63,7 @@ pub enum Opcode {
     LessThan = 45,         // could do without?
     LessThanEqual = 46,    // could do without?
     GreaterThanEqual = 47, // could do without?
+    LoopStart = 48,
 }
 
 impl From<u8> for Opcode {
@@ -129,6 +130,7 @@ impl From<u8> for Opcode {
             45 => Opcode::LessThan,      // could do without?
             46 => Opcode::LessThanEqual, // could do without?
             47 => Opcode::GreaterThanEqual, // could do without?
+            48 => Opcode::LoopStart,
             _ => panic!("Unknown value: {}", orig),
         }
     }
@@ -158,6 +160,7 @@ impl Opcode {
             | Opcode::SetGlobal
             | Opcode::Array
             | Opcode::Hash 
+            | Opcode::LoopStart
             => vec![2],
             Opcode::SetLocal
             | Opcode::GetLocal
@@ -226,6 +229,7 @@ impl Opcode {
             | Opcode::GetLocal
             | Opcode::Call
             | Opcode::Hash
+            | Opcode::LoopStart
             // | Opcode::Closure
             // | Opcode::BuiltinFunc
             // | Opcode::GetFree 

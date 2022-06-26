@@ -160,6 +160,7 @@ impl Lexer {
                         //    "let" => Token::LET,
                         //    "true" => Token::BOOL(true),
                         //    "false" => Token::BOOL(false),
+                            "while" => TT::WHILE,
                             "if" => TT::IF,
                             "else" => TT::ELSE,
                         //    "return" => Token::RETURN,
@@ -297,7 +298,7 @@ mod tests {
     #[test]
     fn test_next_token_more_symbols() {
         //let input = "+-><!/*==!=>=<=";
-        let input = "+<><=>==-/*<-\\";
+        let input = "+<><=>==-/*<-\\while";
         let expected: Vec<TT> = vec![
             // TT::FIRSTPICK,
             // TT::TALLY,
@@ -326,6 +327,7 @@ mod tests {
             // TT::LTE,
             TT::ASSIGN,
             TT::REDUCE,
+            TT::WHILE,
             TT::EOF,
         ];
 

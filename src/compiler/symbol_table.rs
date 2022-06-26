@@ -139,6 +139,11 @@ impl SymbolTable {
     }
 
     pub fn define(&mut self, name: &str) -> Symbol {
+        // check if it already exists before defining it
+        if let Some(symbol) = self.resolve(name.to_string()) {
+            return symbol;
+        }
+
         let scope = match self.outer {
             None => SymbolScope::Global,
             Some(_) => SymbolScope::Local,
