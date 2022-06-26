@@ -127,8 +127,8 @@ impl From<u8> for Opcode {
             // 42 => Opcode::Modulus,
             43 => Opcode::And,
             44 => Opcode::Or,
-            45 => Opcode::LessThan,      // could do without?
-            46 => Opcode::LessThanEqual, // could do without?
+            45 => Opcode::LessThan,         // could do without?
+            46 => Opcode::LessThanEqual,    // could do without?
             47 => Opcode::GreaterThanEqual, // could do without?
             48 => Opcode::Piset,
             _ => panic!("Unknown value: {}", orig),

@@ -11,7 +11,7 @@ use self::frame::Frame;
 
 const DEFAULT_STACK_SIZE: usize = 2048;
 
-const NULL : Object = Object::Null;
+const NULL: Object = Object::Null;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VMError {
@@ -51,7 +51,13 @@ fn is_truthy(obj: Object) -> bool {
 }
 
 impl VM {
-    pub fn flash(bytecode: Bytecode, screen_width: usize, screen_height: usize, screen_size: usize, debug: bool) -> Self {
+    pub fn flash(
+        bytecode: Bytecode,
+        screen_width: usize,
+        screen_height: usize,
+        screen_size: usize,
+        debug: bool,
+    ) -> Self {
         let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, 0)];
 
         // let frames = vec![Frame::new(bytecode.instructions.clone(), 0, 0, vec![], 0)];
@@ -116,7 +122,7 @@ impl VM {
     }
 
     fn current_frame(&mut self) -> &Frame {
-        &self.frames[self.frames_index-1_usize]
+        &self.frames[self.frames_index - 1_usize]
         //return self
         //    .frames
         //    .get((self.frames_index - 1) as usize)
@@ -130,7 +136,7 @@ impl VM {
 
     pub fn execute(&mut self) -> Result<u8, VMError> {
         if self.halted {
-            return Ok(1)
+            return Ok(1);
         }
 
         // println!("instructions: {:?}",self.current_frame().instructions().expect("stuff").data);
@@ -274,9 +280,7 @@ impl VM {
             | Opcode::GreaterThan
             | Opcode::GreaterThanEqual
             | Opcode::NotEqual
-            | Opcode::Equal => {
-                self.execute_binary_operation(op.clone())?
-            }
+            | Opcode::Equal => self.execute_binary_operation(op.clone())?,
             Opcode::True => todo!(),
             Opcode::False => todo!(),
             Opcode::Minus => {
@@ -284,25 +288,28 @@ impl VM {
                 // TODO: figure out how to reduce this cost without allowing things to loop forever?
                 1
             }
-            Opcode::Bang => {self.execute_bang_operator()?; 1} 
+            Opcode::Bang => {
+                self.execute_bang_operator()?;
+                1
+            }
             Opcode::Jump => {
                 let buff = [
-                    *cur_instructions.data.get(ip+1).expect("expected byte"),
-                    *cur_instructions.data.get(ip+2).expect("expected byte"),
+                    *cur_instructions.data.get(ip + 1).expect("expected byte"),
+                    *cur_instructions.data.get(ip + 2).expect("expected byte"),
                 ];
                 let jump_target = u16::from_be_bytes(buff);
-                self.set_ip(jump_target as i64-1);
+                self.set_ip(jump_target as i64 - 1);
 
                 // maybe lower cost?
                 2
             }
             Opcode::JumpNotTruthy => {
                 let buff = [
-                    *cur_instructions.data.get(ip+1).expect("expected byte"),
-                    *cur_instructions.data.get(ip+2).expect("expected byte"),
+                    *cur_instructions.data.get(ip + 1).expect("expected byte"),
+                    *cur_instructions.data.get(ip + 2).expect("expected byte"),
                 ];
                 let jump_target = u16::from_be_bytes(buff);
-                self.set_ip((ip+2) as i64);
+                self.set_ip((ip + 2) as i64);
                 let condition = self.pop();
                 if !is_truthy(condition) {
                     self.set_ip((jump_target - 1) as i64);
@@ -310,12 +317,12 @@ impl VM {
 
                 // maybe lower cost?
                 4
-            },
+            }
             Opcode::Null => {
                 // TODO: zero?
                 self.push(NULL)?;
                 1
-            },
+            }
             Opcode::Array => {
                 let buff = [
                     *cur_instructions.data.get(ip + 1).expect("expected byte"),
@@ -344,7 +351,7 @@ impl VM {
             Opcode::Piset => {
                 self.execute_piset()?;
                 1
-            },
+            }
         };
 
         if self.debug {
@@ -633,20 +640,21 @@ impl VM {
     }
 
     fn is_not_zero(arr: Vec<Object>) -> Vec<Object> {
-        let result : Vec<Object> = arr.iter().map(|obj| {
-            match obj {
+        let result: Vec<Object> = arr
+            .iter()
+            .map(|obj| match obj {
                 Object::Number(n) => {
                     if *n == 0.0 {
                         Object::Number(1.0)
                     } else {
                         Object::Number(0.0)
                     }
-                },
+                }
                 Object::Array(ar) => Object::Array(VM::is_not_zero(ar.to_owned())),
-                _ => Object::Number(0.0)
-            }
-        }).collect::<Vec<Object>>();
-        
+                _ => Object::Number(0.0),
+            })
+            .collect::<Vec<Object>>();
+
         result
     }
 
@@ -660,10 +668,8 @@ impl VM {
                 } else {
                     self.push(Object::Number(0.0))
                 }
-            },
-            Object::Array(arr) => {
-                self.push(Object::Array(VM::is_not_zero(arr)))
             }
+            Object::Array(arr) => self.push(Object::Array(VM::is_not_zero(arr))),
             Object::Null => self.push(Object::Number(1.0)),
             _ => self.push(Object::Number(0.0)),
         }
@@ -703,36 +709,61 @@ impl VM {
     }
 
     fn execute_piset(&mut self) -> Result<(), VMError> {
-        let pal = self.pop();
         let color = self.pop();
+        let pal = self.pop();
         let y = self.pop();
         let x = self.pop();
 
+        println!("x {:?} y {:?}", x, y);
+
         let xval = match x {
             Object::Number(n) => n as usize,
-            v => return Err(VMError::Reason(format!("invalid x value for piset {:?}", v)))
+            v => {
+                return Err(VMError::Reason(format!(
+                    "invalid x value for piset {:?}",
+                    v
+                )))
+            }
         };
 
         let yval = match y {
             Object::Number(n) => n as usize,
-            v => return Err(VMError::Reason(format!("invalid y value for piset {:?}", v)))
+            v => {
+                return Err(VMError::Reason(format!(
+                    "invalid y value for piset {:?}",
+                    v
+                )))
+            }
         };
 
         let colorval = match color {
             Object::Number(n) => n as u8 & 0b0000_1111,
-            v => return Err(VMError::Reason(format!("invalid color value for piset {:?}", v)))
+            v => {
+                return Err(VMError::Reason(format!(
+                    "invalid color value for piset {:?}",
+                    v
+                )))
+            }
         };
-
 
         let paletteval = match pal {
             Object::Number(n) => n as u8 & 0b0000_1111,
-            v => return Err(VMError::Reason(format!("invalid palette value for piset {:?}", v)))
+            v => {
+                return Err(VMError::Reason(format!(
+                    "invalid palette value for piset {:?}",
+                    v
+                )))
+            }
         };
 
-        
-       let pixel = (paletteval << 4) + colorval;
-       self.screen[self.screen_width * yval + xval] = pixel;
-    
+        println!(
+            "x {} y {} pal {} color {}",
+            xval, yval, paletteval, colorval
+        );
+
+        let pixel = (paletteval << 4) + colorval;
+        self.screen[self.screen_width * yval + xval] = pixel;
+
         Ok(())
     }
 
@@ -983,53 +1014,60 @@ mod tests {
         run_vm_test(tests);
     }
 
-
     #[test]
     fn test_if_statement() {
-        let tests: Vec<VMTestCase> = vec![VMTestCase {
-            expected_top: Some(Object::Number(2.0)),
-            input: "if(1) {2};".to_string(),
-            expected_cycles: 13,
-        }, VMTestCase {
-            expected_top: Some(Object::Null),
-            input: "if(0) {2};".to_string(),
-            expected_cycles: 13,
-        }, VMTestCase {
-            expected_top: Some(Object::Number(2.0)),
-            input: "if(1) {2} else {3};".to_string(),
-            expected_cycles: 13,
-        }, VMTestCase {
-            expected_top: Some(Object::Number(3.0)),
-            input: "if(0) {2} else {3};".to_string(),
-            expected_cycles: 13,
-        },VMTestCase {
-            expected_top: Some(Object::Number(2.0)),
-            input: "if([0,0,0,1]\\+) {2} else {3};".to_string(),
-            expected_cycles: 26,
-        },VMTestCase {
-            expected_top: Some(Object::Number(3.0)),
-            input: "if([0,0,0,0]\\+) {2} else {3};".to_string(),
-            expected_cycles: 26,
-        }];
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(2.0)),
+                input: "if(1) {2};".to_string(),
+                expected_cycles: 13,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Null),
+                input: "if(0) {2};".to_string(),
+                expected_cycles: 13,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(2.0)),
+                input: "if(1) {2} else {3};".to_string(),
+                expected_cycles: 13,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(3.0)),
+                input: "if(0) {2} else {3};".to_string(),
+                expected_cycles: 13,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(2.0)),
+                input: "if([0,0,0,1]\\+) {2} else {3};".to_string(),
+                expected_cycles: 26,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(3.0)),
+                input: "if([0,0,0,0]\\+) {2} else {3};".to_string(),
+                expected_cycles: 26,
+            },
+        ];
 
         run_vm_test(tests);
     }
 
     #[test]
-    fn test_while_loop(){
+    fn test_while_loop() {
         // "a <- 0; while (a < 10) { a <- 10 };"
 
         let tests: Vec<VMTestCase> = vec![
-        VMTestCase {
-            expected_top: Some(Object::Number(10.0)),
-            input: "a <- 0; while (a < 10) { a <- a + 1 };a".to_string(),
-            expected_cycles: 330,
-        },
-        VMTestCase {
-            expected_top: Some(Object::Number(100.0)),
-            input: "a <- 0; while (a < 10) { a <- 100 };a".to_string(),
-            expected_cycles: 35,
-        }];
+            VMTestCase {
+                expected_top: Some(Object::Number(10.0)),
+                input: "a <- 0; while (a < 10) { a <- a + 1 };a".to_string(),
+                expected_cycles: 330,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(100.0)),
+                input: "a <- 0; while (a < 10) { a <- 100 };a".to_string(),
+                expected_cycles: 35,
+            },
+        ];
 
         run_vm_test(tests);
     }
@@ -1300,15 +1338,18 @@ mod tests {
 
     #[test]
     fn test_let() {
-        let tests: Vec<VMTestCase> = vec![VMTestCase {
-            expected_top: Some(Object::Number(10.0)),
-            input: "a <- 10; a".to_string(),
-            expected_cycles: 7,
-        },VMTestCase {
-            expected_top: Some(Object::Number(11.0)),
-            input: "a <- 10; a <- a + 1; a;".to_string(),
-            expected_cycles: 25,
-        }];
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_top: Some(Object::Number(10.0)),
+                input: "a <- 10; a".to_string(),
+                expected_cycles: 7,
+            },
+            VMTestCase {
+                expected_top: Some(Object::Number(11.0)),
+                input: "a <- 10; a <- a + 1; a;".to_string(),
+                expected_cycles: 25,
+            },
+        ];
 
         run_vm_test(tests);
     }

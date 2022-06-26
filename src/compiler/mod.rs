@@ -6,8 +6,16 @@ use std::{
     vec::Drain,
 };
 
-
-use crate::{code::{make, Opcode}, parser::{ast::{BlockStatement, Expression, Identifier, Infix, Literal, Postfix, PostfixModifier, Prefix, Program, Statement}, token::TokenType}};
+use crate::{
+    code::{make, Opcode},
+    parser::{
+        ast::{
+            BlockStatement, Expression, Identifier, Infix, Literal, Postfix, PostfixModifier,
+            Prefix, Program, Statement,
+        },
+        token::TokenType,
+    },
+};
 
 use self::symbol_table::SymbolTable;
 
@@ -154,9 +162,9 @@ impl Compiler {
             Expression::Literal(literal) => self.compile_literal(literal),
             Expression::Postfix(p, exp) => self.compile_postfix(p, *exp),
             Expression::If {
-                 condition,
-                 consequence,
-                 alternative,
+                condition,
+                consequence,
+                alternative,
             } => self.compile_if(condition, consequence, alternative),
             //Expression::While {
             //     condition,
@@ -268,26 +276,23 @@ impl Compiler {
         // this gets properly set later (back patching)
         let jump_not_truthy_pos = self.emit(Opcode::JumpNotTruthy, Some(vec![9999]));
         //self.emit(Opcode::Pop, None); // TODO:???
-        
+
         self.compile(body)?;
         //if self.last_instruction_is(Opcode::Pop) {
         //    self.remove_last_pop();
         //}
 
         self.emit(Opcode::Jump, Some(vec![condition_start]));
-        
+
         let after_body_pos = self.scope_to_byte_position();
-        self.change_operand(
-            jump_not_truthy_pos,
-            Some(vec![after_body_pos as i32]),
-        );
+        self.change_operand(jump_not_truthy_pos, Some(vec![after_body_pos as i32]));
         // emit pop?
         // self.emit(Opcode::Pop, None); // TODO:???
         //
 
         Ok(())
     }
-    
+
     fn compile_if(
         &mut self,
         condition: Box<Expression>,
@@ -330,17 +335,29 @@ impl Compiler {
 
         Ok(())
     }
-    
+
     fn change_operand(&mut self, opcode_pos: usize, operands: Option<Vec<i32>>) {
-        let op = &self.current_instructions().expect("expected instructions to exist")[opcode_pos];
-        self.replace_instruction(opcode_pos, EmittedInstruction { op: op.op.clone(), operands, position: op.position });
+        let op = &self
+            .current_instructions()
+            .expect("expected instructions to exist")[opcode_pos];
+        self.replace_instruction(
+            opcode_pos,
+            EmittedInstruction {
+                op: op.op.clone(),
+                operands,
+                position: op.position,
+            },
+        );
     }
 
     fn scope_to_byte_position(&self) -> i32 {
         self.scopes[self.scope_index]
             .instructions
             .iter()
-            .fold(0_usize, |mut sum, x|{sum += x.op.operand_width(); sum+1}) as i32 
+            .fold(0_usize, |mut sum, x| {
+                sum += x.op.operand_width();
+                sum + 1
+            }) as i32
     }
 
     fn replace_instruction(&mut self, pos: usize, new_instruction: EmittedInstruction) {
@@ -390,7 +407,7 @@ impl Compiler {
             Some(instr) => instr.len(),
             None => 0,
         };
-        let recent_emit = EmittedInstruction{
+        let recent_emit = EmittedInstruction {
             op,
             operands,
             position: pos,
@@ -403,7 +420,12 @@ impl Compiler {
     }
 
     fn set_last_instruction(&mut self, last: EmittedInstruction) {
-        let prev = self.scopes.get(self.scope_index).unwrap().last_instruction.clone();
+        let prev = self
+            .scopes
+            .get(self.scope_index)
+            .unwrap()
+            .last_instruction
+            .clone();
         self.scopes[self.scope_index].previous_instruction = prev;
         self.scopes[self.scope_index].last_instruction = Some(last);
     }
@@ -744,7 +766,6 @@ impl fmt::Display for Object {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
@@ -760,7 +781,6 @@ mod tests {
         expected_constants: Vec<Object>,
         expected_instructions: Vec<Instructions>,
     }
-
 
     fn parse(input: String) -> parser::ast::Program {
         let l = Lexer::new(input);
@@ -800,25 +820,26 @@ mod tests {
         run_compiler_test(tests);
     }
 
-
-
     #[test]
     fn test_piset() {
-        let tests: Vec<CompilerTestCase> = vec![
-            CompilerTestCase {
-                input: "piset(1,2,3,4)".to_string(),
-                expected_constants: vec![Object::Number(1.0), Object::Number(2.0), Object::Number(3.0), Object::Number(4.0)],
-                expected_instructions: vec![
-                    make(Opcode::Constant, Some(vec![0])).unwrap(),
-                    make(Opcode::Constant, Some(vec![1])).unwrap(),
-                    make(Opcode::Constant, Some(vec![2])).unwrap(),
-                    make(Opcode::Constant, Some(vec![3])).unwrap(),
-                    make(Opcode::Piset, None).unwrap(),
-                    make(Opcode::Null, None).unwrap(),
-                    make(Opcode::Pop, None).unwrap(),
-                ],
-            },
-        ];
+        let tests: Vec<CompilerTestCase> = vec![CompilerTestCase {
+            input: "piset(1,2,3,4)".to_string(),
+            expected_constants: vec![
+                Object::Number(1.0),
+                Object::Number(2.0),
+                Object::Number(3.0),
+                Object::Number(4.0),
+            ],
+            expected_instructions: vec![
+                make(Opcode::Constant, Some(vec![0])).unwrap(),
+                make(Opcode::Constant, Some(vec![1])).unwrap(),
+                make(Opcode::Constant, Some(vec![2])).unwrap(),
+                make(Opcode::Constant, Some(vec![3])).unwrap(),
+                make(Opcode::Piset, None).unwrap(),
+                make(Opcode::Null, None).unwrap(),
+                make(Opcode::Pop, None).unwrap(),
+            ],
+        }];
 
         run_compiler_test(tests);
     }
@@ -871,13 +892,12 @@ mod tests {
         run_compiler_test(tests);
     }
 
-
     #[test]
     fn test_while_loop() {
         let tests: Vec<CompilerTestCase> = vec![
             CompilerTestCase {
                 input: "while (1) { 25 }".to_string(),
-                expected_constants: vec![Object::Number(1.0), Object::Number(25.0) ],
+                expected_constants: vec![Object::Number(1.0), Object::Number(25.0)],
                 expected_instructions: vec![
                     // 00
                     make(Opcode::Constant, Some(vec![0])).unwrap(),
@@ -894,7 +914,11 @@ mod tests {
             },
             CompilerTestCase {
                 input: "a <- 0; while (a < 10) { a <- 10 };".to_string(),
-                expected_constants: vec![Object::Number(0.0), Object::Number(10.0), Object::Number(10.0)],
+                expected_constants: vec![
+                    Object::Number(0.0),
+                    Object::Number(10.0),
+                    Object::Number(10.0),
+                ],
                 expected_instructions: vec![
                     make(Opcode::Constant, Some(vec![0])).unwrap(),
                     make(Opcode::SetGlobal, Some(vec![0])).unwrap(),
@@ -907,7 +931,6 @@ mod tests {
                     make(Opcode::Jump, Some(vec![6])).unwrap(),
                 ],
             },
-            
         ];
 
         run_compiler_test(tests);
@@ -918,7 +941,12 @@ mod tests {
         let tests: Vec<CompilerTestCase> = vec![
             CompilerTestCase {
                 input: "if (1) { 10 } else { 20 }; 3333;".to_string(),
-                expected_constants: vec![Object::Number(1.0), Object::Number(10.0), Object::Number(20.0), Object::Number(3333.0)],
+                expected_constants: vec![
+                    Object::Number(1.0),
+                    Object::Number(10.0),
+                    Object::Number(20.0),
+                    Object::Number(3333.0),
+                ],
                 expected_instructions: vec![
                     // 00
                     make(Opcode::Constant, Some(vec![0])).unwrap(),
@@ -940,7 +968,11 @@ mod tests {
             },
             CompilerTestCase {
                 input: "if (1) { 10 }; 3333;".to_string(),
-                expected_constants: vec![Object::Number(1.0), Object::Number(10.0), Object::Number(3333.0)],
+                expected_constants: vec![
+                    Object::Number(1.0),
+                    Object::Number(10.0),
+                    Object::Number(3333.0),
+                ],
                 expected_instructions: vec![
                     // 00
                     make(Opcode::Constant, Some(vec![0])).unwrap(),
@@ -983,16 +1015,14 @@ mod tests {
 
         run_compiler_test(tests);
     }
-    
-/*
-*/
 
+    /*
+     */
 
     #[test]
     fn test_piset_loop() {
-        let tests: Vec<CompilerTestCase> = vec![
-            CompilerTestCase {
-                input: r#"x <- 0
+        let tests: Vec<CompilerTestCase> = vec![CompilerTestCase {
+            input: r#"x <- 0
 y <- 0
 c <- 0
 while(1) {
@@ -1007,90 +1037,88 @@ while(1) {
 	if (y >= 160) {
 		y <- 0
 	}
-}"#.to_string(),
-                expected_constants: vec![
-                    Object::Number(0.0),
-                    Object::Number(0.0),
-                    Object::Number(0.0),
-                    Object::Number(1.0),
-                    Object::Number(1.0),
-                    Object::Number(1.0),
-                    Object::Number(240.0),
-                    Object::Number(0.0),
-                    Object::Number(0.0),
-                    Object::Number(1.0),
-                    Object::Number(160.0),
-                    Object::Number(0.0),
-                ],
-                expected_instructions: vec![
-                    // x, y, c
-                    make(Opcode::Constant, Some(vec![0])).unwrap(), // +
-                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
-                    make(Opcode::Constant, Some(vec![1])).unwrap(), // +
-                    make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
-                    make(Opcode::Constant, Some(vec![2])).unwrap(), // +
-                    make(Opcode::SetGlobal, Some(vec![2])).unwrap(), // -
-                    // while
-                    make(Opcode::Constant, Some(vec![3])).unwrap(), // +
-                    make(Opcode::JumpNotTruthy, Some(vec![119])).unwrap(), // -
-                    // piset
-                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
-                    make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![4])).unwrap(), // +
-                    make(Opcode::GetGlobal, Some(vec![2])).unwrap(), // +
-                    make(Opcode::Piset, None).unwrap(), // - - - -
-                    make(Opcode::Null, None).unwrap(), // +
-                    make(Opcode::Pop, None).unwrap(), // -
-                                                      // 0 so far
-                    // increment x
-                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![5])).unwrap(), // +
-                    make(Opcode::Add, None).unwrap(),  // - - +
-                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
-                    // check if x is >= 240 // 0
-                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![6])).unwrap(), // +
-                    make(Opcode::GreaterThanEqual, None).unwrap(), // - - +
-                    make(Opcode::JumpNotTruthy, Some(vec![68])).unwrap(), // -
-                    // set to zero if >= 240 // 0
-                    make(Opcode::Constant, Some(vec![7])).unwrap(), // +
-                    make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
-                    make(Opcode::Jump, Some(vec![69])).unwrap(), // ?
-                    make(Opcode::Null, None).unwrap(), // +
-                    make(Opcode::Pop, None).unwrap(), // -
-                    // if x = 0
-                    make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![8])).unwrap(), // +
-                    make(Opcode::Equal, None).unwrap(), // - - +
-                    make(Opcode::JumpNotTruthy, Some(vec![93])).unwrap(), // -
-                    // y <- y + 1 // 0
-                    make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![9])).unwrap(), // +
-                    make(Opcode::Add, None).unwrap(), // - - +
-                    make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
-                    make(Opcode::Jump, Some(vec![94])).unwrap(), // ?
-                    make(Opcode::Null, None).unwrap(), // +
-                    make(Opcode::Pop, None).unwrap(), // -
-
-                    // if y >= 160  // 0
-                    make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
-                    make(Opcode::Constant, Some(vec![10])).unwrap(), // +
-                    make(Opcode::GreaterThanEqual, None).unwrap(), // - - +
-                    make(Opcode::JumpNotTruthy, Some(vec![114])).unwrap(), // -
-                    // y <- 0 // 0
-                    make(Opcode::Constant, Some(vec![11])).unwrap(), // +
-                    make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
-                    make(Opcode::Jump, Some(vec![115])).unwrap(), // ?
-                    make(Opcode::Null, None).unwrap(), // +   <<<<<
-                    // DIDN'T POP NULL?
-                    make(Opcode::Pop, None).unwrap(),
-                    make(Opcode::Jump, Some(vec![18])).unwrap(), // ?
-                    //make(Opcode::Null, None).unwrap(), // +
-                    //make(Opcode::Pop, None).unwrap(), // -
-
-                ],
-            },
-        ];
+}"#
+            .to_string(),
+            expected_constants: vec![
+                Object::Number(0.0),
+                Object::Number(0.0),
+                Object::Number(0.0),
+                Object::Number(1.0),
+                Object::Number(1.0),
+                Object::Number(1.0),
+                Object::Number(240.0),
+                Object::Number(0.0),
+                Object::Number(0.0),
+                Object::Number(1.0),
+                Object::Number(160.0),
+                Object::Number(0.0),
+            ],
+            expected_instructions: vec![
+                // x, y, c
+                make(Opcode::Constant, Some(vec![0])).unwrap(), // +
+                make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
+                make(Opcode::Constant, Some(vec![1])).unwrap(), // +
+                make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
+                make(Opcode::Constant, Some(vec![2])).unwrap(), // +
+                make(Opcode::SetGlobal, Some(vec![2])).unwrap(), // -
+                // while
+                make(Opcode::Constant, Some(vec![3])).unwrap(), // +
+                make(Opcode::JumpNotTruthy, Some(vec![119])).unwrap(), // -
+                // piset
+                make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
+                make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![4])).unwrap(),  // +
+                make(Opcode::GetGlobal, Some(vec![2])).unwrap(), // +
+                make(Opcode::Piset, None).unwrap(),              // - - - -
+                make(Opcode::Null, None).unwrap(),               // +
+                make(Opcode::Pop, None).unwrap(),                // -
+                // 0 so far
+                // increment x
+                make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![5])).unwrap(),  // +
+                make(Opcode::Add, None).unwrap(),                // - - +
+                make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
+                // check if x is >= 240 // 0
+                make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![6])).unwrap(),  // +
+                make(Opcode::GreaterThanEqual, None).unwrap(),   // - - +
+                make(Opcode::JumpNotTruthy, Some(vec![68])).unwrap(), // -
+                // set to zero if >= 240 // 0
+                make(Opcode::Constant, Some(vec![7])).unwrap(), // +
+                make(Opcode::SetGlobal, Some(vec![0])).unwrap(), // -
+                make(Opcode::Jump, Some(vec![69])).unwrap(),    // ?
+                make(Opcode::Null, None).unwrap(),              // +
+                make(Opcode::Pop, None).unwrap(),               // -
+                // if x = 0
+                make(Opcode::GetGlobal, Some(vec![0])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![8])).unwrap(),  // +
+                make(Opcode::Equal, None).unwrap(),              // - - +
+                make(Opcode::JumpNotTruthy, Some(vec![93])).unwrap(), // -
+                // y <- y + 1 // 0
+                make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![9])).unwrap(),  // +
+                make(Opcode::Add, None).unwrap(),                // - - +
+                make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
+                make(Opcode::Jump, Some(vec![94])).unwrap(),     // ?
+                make(Opcode::Null, None).unwrap(),               // +
+                make(Opcode::Pop, None).unwrap(),                // -
+                // if y >= 160  // 0
+                make(Opcode::GetGlobal, Some(vec![1])).unwrap(), // +
+                make(Opcode::Constant, Some(vec![10])).unwrap(), // +
+                make(Opcode::GreaterThanEqual, None).unwrap(),   // - - +
+                make(Opcode::JumpNotTruthy, Some(vec![114])).unwrap(), // -
+                // y <- 0 // 0
+                make(Opcode::Constant, Some(vec![11])).unwrap(), // +
+                make(Opcode::SetGlobal, Some(vec![1])).unwrap(), // -
+                make(Opcode::Jump, Some(vec![115])).unwrap(),    // ?
+                make(Opcode::Null, None).unwrap(),               // +   <<<<<
+                // DIDN'T POP NULL?
+                make(Opcode::Pop, None).unwrap(),
+                make(Opcode::Jump, Some(vec![18])).unwrap(), // ?
+                                                             //make(Opcode::Null, None).unwrap(), // +
+                                                             //make(Opcode::Pop, None).unwrap(), // -
+            ],
+        }];
 
         run_compiler_test(tests);
     }
@@ -1122,7 +1150,6 @@ while(1) {
             assert!(constant_result.is_ok());
         }
     }
-
 
     fn test_instructions(
         expected: Vec<Instructions>,
@@ -1169,26 +1196,26 @@ while(1) {
                     Object::Number(v2) => assert_eq!(v, v2),
                     _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
                 },
-            //    Object::String(s) => match got.get(i).unwrap() {
-            //        Object::String(s2) => assert_eq!(s, s2),
-            //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
-            //    },
-            //    Object::CompiledFunction {
-            //        instructions: Instructions { data },
-            //        num_locals,
-            //        num_parameters,
-            //    } => match got.get(i).unwrap() {
-            //        Object::CompiledFunction {
-            //            instructions: Instructions { data: data2 },
-            //            num_locals: locals2,
-            //            num_parameters: params2,
-            //        } => {
-            //            assert_eq!(data, data2);
-            //            assert_eq!(num_locals, locals2);
-            //            assert_eq!(num_parameters, params2);
-            //        }
-            //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
-            //    },
+                //    Object::String(s) => match got.get(i).unwrap() {
+                //        Object::String(s2) => assert_eq!(s, s2),
+                //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
+                //    },
+                //    Object::CompiledFunction {
+                //        instructions: Instructions { data },
+                //        num_locals,
+                //        num_parameters,
+                //    } => match got.get(i).unwrap() {
+                //        Object::CompiledFunction {
+                //            instructions: Instructions { data: data2 },
+                //            num_locals: locals2,
+                //            num_parameters: params2,
+                //        } => {
+                //            assert_eq!(data, data2);
+                //            assert_eq!(num_locals, locals2);
+                //            assert_eq!(num_parameters, params2);
+                //        }
+                //        _ => return Err(CompileError::Reason("wrong comparison types".to_string())),
+                //    },
                 _ => {}
             }
         }

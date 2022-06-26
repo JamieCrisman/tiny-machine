@@ -4,8 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-
-
 use crate::Stats;
 
 pub(crate) struct Gui {

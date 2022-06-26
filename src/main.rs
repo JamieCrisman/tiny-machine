@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-
 use compiler::Compiler;
 use game_loop::{game_loop, Time, TimeTrait};
 use parser::{lexer::Lexer, Parser};
@@ -78,7 +77,13 @@ struct Machine {
 
 impl Machine {
     fn new(mut pixels: Pixels, bc: compiler::Bytecode, gui: gui::Gui, debug: bool) -> Self {
-        let vm = VM::flash(bc, WIDTH as usize, HEIGHT as usize, pixels.get_frame().len() / 4, debug);
+        let vm = VM::flash(
+            bc,
+            WIDTH as usize,
+            HEIGHT as usize,
+            pixels.get_frame().len() / 4,
+            debug,
+        );
         Self {
             pixels,
             // controls: Controls::default(),
@@ -299,7 +304,7 @@ fn main() -> Result<(), SessionError> {
                     Err(err) => panic!("error on execution: {:?}", err),
                 }
             }
-            
+
             g.game.gui.set_stats(
                 start.elapsed(),
                 emulated_cycles,

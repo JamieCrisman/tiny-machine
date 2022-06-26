@@ -114,13 +114,13 @@ impl Lexer {
                 '∧' => TT::AND,
                 '∨' => TT::OR,
                 '!' => {
-                     let peeked = self.peek_char();
-                     if peeked.is_some() && peeked.unwrap() == '=' {
-                         self.read_char();
-                         TT::NOTEQUAL
-                     } else {
-                         TT::BANG
-                     }
+                    let peeked = self.peek_char();
+                    if peeked.is_some() && peeked.unwrap() == '=' {
+                        self.read_char();
+                        TT::NOTEQUAL
+                    } else {
+                        TT::BANG
+                    }
                 }
                 // '>' => TT::GREATERTHAN,
                 // '≥' => TT::GREATERTHANEQUAL,
@@ -156,16 +156,16 @@ impl Lexer {
                     if is_letter(x) {
                         let literal = self.read_identifier();
                         match literal.as_str() {
-                        //    "fn" => Token::FUNCTION,
-                        //    "let" => Token::LET,
-                        //    "true" => Token::BOOL(true),
-                        //    "false" => Token::BOOL(false),
+                            //    "fn" => Token::FUNCTION,
+                            //    "let" => Token::LET,
+                            //    "true" => Token::BOOL(true),
+                            //    "false" => Token::BOOL(false),
                             "while" => TT::WHILE,
                             "if" => TT::IF,
                             "else" => TT::ELSE,
                             "piset" => TT::PISET,
                             // "piget" => TT::PIGET,
-                        //    "return" => Token::RETURN,
+                            //    "return" => Token::RETURN,
                             _ => TT::IDENTIFIER(literal),
                         }
                     } else if is_digit(x) {

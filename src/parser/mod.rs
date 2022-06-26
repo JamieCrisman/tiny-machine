@@ -68,12 +68,10 @@ impl Parser {
             TokenType::ASSIGN => self.parse_let_statement(),
             TokenType::WHILE => self.parse_while_statement(),
             // TokenType::RETURN => self.parse_return_statement(),
-            _ => {
-                match self.cur_token_type {
-                    TokenType::WHILE => self.parse_while_statement(),
-                    _ => self.parse_expression_statement(),
-                }
-            } 
+            _ => match self.cur_token_type {
+                TokenType::WHILE => self.parse_while_statement(),
+                _ => self.parse_expression_statement(),
+            },
         }
     }
 
@@ -162,8 +160,7 @@ impl Parser {
             TokenType::BOOL(_) => self.parse_bool_expr(),
             TokenType::LBRACKET => self.parse_array_ident_expr(),
             // TokenType::LBRACE => self.parse_hash_expr(),
-            TokenType::BANG
-            | TokenType::MINUS => self.parse_prefix_expression(),
+            TokenType::BANG | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::LPAREN => self.parse_grouped_expr(),
             TokenType::IF => self.parse_if_expression(),
             //TokenType::WHILE => self.parse_while_expression(),
@@ -319,43 +316,49 @@ impl Parser {
         self.next_token();
         let params = self.parse_func_params();
         if params.is_none() || params.as_ref().unwrap().len() != 4 {
-            self.errors.push(format!("piset was called with {} params, instead of the expected {}", params.unwrap_or(vec![]).len(), 4));
+            self.errors.push(format!(
+                "piset was called with {} params, instead of the expected {}",
+                params.unwrap_or(vec![]).len(),
+                4
+            ));
             return None;
         }
 
-       Some(Expression::Piset{params: params.unwrap()})
+        Some(Expression::Piset {
+            params: params.unwrap(),
+        })
     }
 
-     fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
-         let mut params = vec![];
-         if self.peek_token_type == TokenType::RPAREN {
-             self.next_token();
-             return Some(params);
-         }
+    fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
+        let mut params = vec![];
+        if self.peek_token_type == TokenType::RPAREN {
+            self.next_token();
+            return Some(params);
+        }
 
-         self.next_token();
+        self.next_token();
 
-         match self.parse_expression(Precedence::Lowest) {
-             Some(exp) => params.push(exp),
-             None => return None,
-         }
+        match self.parse_expression(Precedence::Lowest) {
+            Some(exp) => params.push(exp),
+            None => return None,
+        }
 
-         while self.peek_token_type == TokenType::COMMA {
-             self.next_token();
-             self.next_token();
+        while self.peek_token_type == TokenType::COMMA {
+            self.next_token();
+            self.next_token();
 
-             match self.parse_expression(Precedence::Lowest) {
-                 Some(exp) => params.push(exp),
-                 None => return None,
-             }
-         }
+            match self.parse_expression(Precedence::Lowest) {
+                Some(exp) => params.push(exp),
+                None => return None,
+            }
+        }
 
-         if !self.expect_peek(TokenType::RPAREN) {
-             return None;
-         }
+        if !self.expect_peek(TokenType::RPAREN) {
+            return None;
+        }
 
-         Some(params)
-     }
+        Some(params)
+    }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut list = vec![];
@@ -389,76 +392,77 @@ impl Parser {
         Some(list)
     }
 
-     fn parse_block_statement(&mut self) -> BlockStatement {
-         self.next_token();
-         let mut block = vec![];
-         while self.cur_token.as_ref().unwrap().token_type != TokenType::RBRACE && self.cur_token.as_ref().unwrap().token_type != TokenType::EOF {
-             match self.parse_statement() {
-                 Some(stmt) => block.push(stmt),
-                 None => {}
-             }
-             self.next_token();
-         }
+    fn parse_block_statement(&mut self) -> BlockStatement {
+        self.next_token();
+        let mut block = vec![];
+        while self.cur_token.as_ref().unwrap().token_type != TokenType::RBRACE
+            && self.cur_token.as_ref().unwrap().token_type != TokenType::EOF
+        {
+            match self.parse_statement() {
+                Some(stmt) => block.push(stmt),
+                None => {}
+            }
+            self.next_token();
+        }
 
-         block
-     }
+        block
+    }
 
+    fn parse_while_statement(&mut self) -> Option<Statement> {
+        if !self.expect_peek(TokenType::LPAREN) {
+            return None;
+        }
 
-     fn parse_while_statement(&mut self) -> Option<Statement> {
-         if !self.expect_peek(TokenType::LPAREN) {
-             return None;
-         }
+        self.next_token();
 
-         self.next_token();
+        let cond = match self.parse_expression(Precedence::Lowest) {
+            Some(expr) => expr,
+            None => return None,
+        };
 
-         let cond = match self.parse_expression(Precedence::Lowest) {
-             Some(expr) => expr,
-             None => return None,
-         };
+        if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
+            return None;
+        }
 
-         if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
-             return None;
-         }
+        let body = self.parse_block_statement();
 
-         let body = self.parse_block_statement();
+        Some(Statement::While(cond, body))
+    }
 
-         Some(Statement::While(cond, body))
-     }
+    fn parse_if_expression(&mut self) -> Option<Expression> {
+        if !self.expect_peek(TokenType::LPAREN) {
+            return None;
+        }
 
-     fn parse_if_expression(&mut self) -> Option<Expression> {
-         if !self.expect_peek(TokenType::LPAREN) {
-             return None;
-         }
+        self.next_token();
 
-         self.next_token();
+        let cond = match self.parse_expression(Precedence::Lowest) {
+            Some(expr) => expr,
+            None => return None,
+        };
 
-         let cond = match self.parse_expression(Precedence::Lowest) {
-             Some(expr) => expr,
-             None => return None,
-         };
+        if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
+            return None;
+        }
 
-         if !self.expect_peek(TokenType::RPAREN) || !self.expect_peek(TokenType::LBRACE) {
-             return None;
-         }
+        let consequence = self.parse_block_statement();
+        let mut alternative = None;
 
-         let consequence = self.parse_block_statement();
-         let mut alternative = None;
+        if self.peek_token.as_ref().unwrap().token_type == TokenType::ELSE {
+            self.next_token();
+            if !self.expect_peek(TokenType::LBRACE) {
+                return None;
+            }
 
-         if self.peek_token.as_ref().unwrap().token_type == TokenType::ELSE {
-             self.next_token();
-             if !self.expect_peek(TokenType::LBRACE) {
-                 return None;
-             }
+            alternative = Some(self.parse_block_statement());
+        }
 
-             alternative = Some(self.parse_block_statement());
-         }
-
-         Some(Expression::If {
-             condition: Box::new(cond),
-             consequence,
-             alternative,
-         })
-     }
+        Some(Expression::If {
+            condition: Box::new(cond),
+            consequence,
+            alternative,
+        })
+    }
 
     fn token_to_infix(tt: TokenType) -> Option<Infix> {
         match tt {
@@ -787,13 +791,13 @@ mod tests {
         let ast = parser.build_ast();
         let errors = parser.errors();
 
-        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::Piset{
+        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::Piset {
             params: vec![
                 Expression::Literal(Literal::Number(1.0)),
                 Expression::Literal(Literal::Number(2.0)),
                 Expression::Literal(Literal::Number(3.0)),
                 Expression::Literal(Literal::Number(4.0)),
-            ]
+            ],
         })];
 
         assert_eq!(errors.len(), 0, "{:?}", errors);
@@ -1021,15 +1025,13 @@ mod tests {
         let ast = parser.build_ast();
         let errors = parser.errors();
 
-        let expected_ast: Vec<Statement> = vec![
-            Statement::Expression(Expression::If{
-                condition: Box::new(Expression::Literal(Literal::Number(1.0))),
-                consequence: vec![
-                    Statement::Expression(Expression::Literal(Literal::Number(2.0)))
-                ],
-                alternative: None
-            })
-        ];
+        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::If {
+            condition: Box::new(Expression::Literal(Literal::Number(1.0))),
+            consequence: vec![Statement::Expression(Expression::Literal(Literal::Number(
+                2.0,
+            )))],
+            alternative: None,
+        })];
 
         assert_eq!(errors.len(), 0, "{:?}", errors);
 
@@ -1044,17 +1046,15 @@ mod tests {
         let ast = parser.build_ast();
         let errors = parser.errors();
 
-        let expected_ast: Vec<Statement> = vec![
-            Statement::Expression(Expression::If{
-                condition: Box::new(Expression::Literal(Literal::Number(1.0))),
-                consequence: vec![
-                    Statement::Expression(Expression::Literal(Literal::Number(2.0)))
-                ],
-                alternative: Some(vec![
-                    Statement::Expression(Expression::Literal(Literal::Number(3.0)))
-                ])
-            })
-        ];
+        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::If {
+            condition: Box::new(Expression::Literal(Literal::Number(1.0))),
+            consequence: vec![Statement::Expression(Expression::Literal(Literal::Number(
+                2.0,
+            )))],
+            alternative: Some(vec![Statement::Expression(Expression::Literal(
+                Literal::Number(3.0),
+            ))]),
+        })];
 
         assert_eq!(errors.len(), 0, "{:?}", errors);
 

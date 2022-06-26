@@ -48,9 +48,9 @@ pub enum Expression {
     Infix(Infix, Box<Expression>, Box<Expression>),
     Index(Box<Expression>, Box<Expression>),
     If {
-         condition: Box<Expression>,
-         consequence: BlockStatement,
-         alternative: Option<BlockStatement>,
+        condition: Box<Expression>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
     },
     //While {
     //    condition: Box<Expression>,
@@ -59,16 +59,15 @@ pub enum Expression {
     // TODO: generalize this
     Piset {
         params: Vec<Expression>,
-    }
-    // Func {
-    //     params: Vec<Ident>,
-    //     body: BlockStatement,
-    //     name: String,
-    // },
-    // Call {
-    //     func: Box<Expression>,
-    //     args: Vec<Expression>,
-    // },
+    }, // Func {
+       //     params: Vec<Ident>,
+       //     body: BlockStatement,
+       //     name: String,
+       // },
+       // Call {
+       //     func: Box<Expression>,
+       //     args: Vec<Expression>,
+       // },
 }
 
 impl fmt::Display for Expression {
@@ -86,7 +85,7 @@ impl fmt::Display for Expression {
             Self::Infix(i, e1, e2) => {
                 write!(f, "({} {} {})", e1, i, e2)
             } // _ => write!(f, "D:"),
-            Self::Piset{params} => {
+            Self::Piset { params } => {
                 write!(f, "piset({:?})", params)
             }
             //Self::While {
@@ -108,24 +107,24 @@ impl fmt::Display for Expression {
             //     //                }
             // }
             Self::If {
-                 condition: _,
-                 consequence: _,
-                 alternative: _,
-             } => {
-                 write!(
-                     f,
-                     "TODO // Can't implement display for Vec, need to wrap it"
-                 )
-                 //                if (alternative.is_some()) {
-                 //                    write!(
-                 //                        f,
-                 //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
-                 //                        condition, consequence, alternative
-                 //                    )
-                 //                } else {
-                 //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
-           //      //                }
-             }
+                condition: _,
+                consequence: _,
+                alternative: _,
+            } => {
+                write!(
+                    f,
+                    "TODO // Can't implement display for Vec, need to wrap it"
+                )
+                //                if (alternative.is_some()) {
+                //                    write!(
+                //                        f,
+                //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
+                //                        condition, consequence, alternative
+                //                    )
+                //                } else {
+                //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
+                //      //                }
+            }
             // Self::Func {
             //     params: _,
             //     body: _,
