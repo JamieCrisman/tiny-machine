@@ -318,7 +318,7 @@ impl Parser {
         if params.is_none() || params.as_ref().unwrap().len() != 4 {
             self.errors.push(format!(
                 "piset was called with {} params, instead of the expected {}",
-                params.unwrap_or(vec![]).len(),
+                params.unwrap_or_default().len(),
                 4
             ));
             return None;

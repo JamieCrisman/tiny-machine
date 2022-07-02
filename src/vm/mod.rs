@@ -718,7 +718,6 @@ impl VM {
         let y = self.pop();
         let x = self.pop();
 
-
         let xval = match x {
             Object::Number(n) => n as usize,
             v => {
@@ -1061,7 +1060,7 @@ mod tests {
             // TODO: this is fragile, we probably want a null return here for consistency
             expected_top: Some(Object::Number(0.0)),
             input: "a <- 0; b <- 0; while (a < 10) { piset(a, b, 3, 4); if (a > 5) { b <- 2; b } a <- a + 1}"
-                .to_string(), 
+                .to_string(),
             expected_cycles: 478,
         }];
 

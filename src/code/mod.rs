@@ -159,7 +159,7 @@ impl Opcode {
             | Opcode::GetGlobal
             | Opcode::SetGlobal
             | Opcode::Array
-            | Opcode::Hash 
+            | Opcode::Hash
             => vec![2],
             Opcode::SetLocal
             | Opcode::GetLocal
