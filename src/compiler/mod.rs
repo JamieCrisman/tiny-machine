@@ -227,8 +227,8 @@ impl Compiler {
     }
 
     fn compile_piset(&mut self, params: Vec<Expression>) -> Result<(), CompileError> {
-        for exp in params.iter() {
-            self.compile_expression(exp.to_owned())?;
+        for exp in params {
+            self.compile_expression(exp)?;
         }
 
         self.emit(Opcode::Piset, None);
@@ -534,6 +534,10 @@ pub struct Objects(Vec<Object>);
 impl Objects {
     pub fn new() -> Self {
         Objects(vec![])
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     pub fn with_capacity(capacity: usize) -> Self {

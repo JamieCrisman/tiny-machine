@@ -314,7 +314,7 @@ impl Parser {
 
     fn parse_piset_expression(&mut self) -> Option<Expression> {
         self.next_token();
-        let params = self.parse_func_params();
+        let params = self.parse_expression_list(TokenType::RPAREN);
         if params.is_none() || params.as_ref().unwrap().len() != 4 {
             self.errors.push(format!(
                 "piset was called with {} params, instead of the expected {}",
@@ -329,36 +329,36 @@ impl Parser {
         })
     }
 
-    fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
-        let mut params = vec![];
-        if self.peek_token_type == TokenType::RPAREN {
-            self.next_token();
-            return Some(params);
-        }
+    // fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
+    //     let mut params = vec![];
+    //     if self.peek_token_type == TokenType::RPAREN {
+    //         self.next_token();
+    //         return Some(params);
+    //     }
 
-        self.next_token();
+    //     self.next_token();
 
-        match self.parse_expression(Precedence::Lowest) {
-            Some(exp) => params.push(exp),
-            None => return None,
-        }
+    //     match self.parse_expression(Precedence::Lowest) {
+    //         Some(exp) => params.push(exp),
+    //         None => return None,
+    //     }
 
-        while self.peek_token_type == TokenType::COMMA {
-            self.next_token();
-            self.next_token();
+    //     while self.peek_token_type == TokenType::COMMA {
+    //         self.next_token();
+    //         self.next_token();
 
-            match self.parse_expression(Precedence::Lowest) {
-                Some(exp) => params.push(exp),
-                None => return None,
-            }
-        }
+    //         match self.parse_expression(Precedence::Lowest) {
+    //             Some(exp) => params.push(exp),
+    //             None => return None,
+    //         }
+    //     }
 
-        if !self.expect_peek(TokenType::RPAREN) {
-            return None;
-        }
+    //     if !self.expect_peek(TokenType::RPAREN) {
+    //         return None;
+    //     }
 
-        Some(params)
-    }
+    //     Some(params)
+    // }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut list = vec![];

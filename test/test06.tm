@@ -1,0 +1,1 @@
+a <- 0; b <- 0; while (a < 10) { piset(a, b, 3, 4); if (a > 5) { b <- b+1; b } a <- a + 1}

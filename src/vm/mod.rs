@@ -263,10 +263,14 @@ impl VM {
                     *cur_instructions.data.get(ip + 1).expect("expected byte"),
                     *cur_instructions.data.get(ip + 2).expect("expected byte"),
                 ];
-                let global_index = u16::from_be_bytes(buff);
+                let global_index = u16::from_be_bytes(buff) as usize;
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
-                self.globals.insert(global_index as usize, pop);
+                if global_index == self.globals.len() {
+                    self.globals.insert(global_index, pop);
+                } else if global_index < self.globals.len() {
+                    self.globals[global_index] = pop;
+                }
                 2
             }
             Opcode::Add
@@ -714,7 +718,6 @@ impl VM {
         let y = self.pop();
         let x = self.pop();
 
-        println!("x {:?} y {:?}", x, y);
 
         let xval = match x {
             Object::Number(n) => n as usize,
@@ -756,10 +759,10 @@ impl VM {
             }
         };
 
-        println!(
-            "x {} y {} pal {} color {}",
-            xval, yval, paletteval, colorval
-        );
+        // println!(
+        //     "x {} y {} pal {} color {}",
+        //     xval, yval, paletteval, colorval
+        // );
 
         let pixel = (paletteval << 4) + colorval;
         self.screen[self.screen_width * yval + xval] = pixel;
@@ -1052,6 +1055,18 @@ mod tests {
         run_vm_test(tests);
     }
 
+    #[test]
+    fn test_piset() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            // TODO: this is fragile, we probably want a null return here for consistency
+            expected_top: Some(Object::Number(0.0)),
+            input: "a <- 0; b <- 0; while (a < 10) { piset(a, b, 3, 4); if (a > 5) { b <- 2; b } a <- a + 1}"
+                .to_string(), 
+            expected_cycles: 478,
+        }];
+
+        run_vm_test(tests);
+    }
     #[test]
     fn test_while_loop() {
         // "a <- 0; while (a < 10) { a <- 10 };"
@@ -1399,7 +1414,7 @@ mod tests {
             let compile_result = c.read(ast);
             assert!(compile_result.is_ok());
 
-            let mut vmm = VM::flash(c.bytecode(), 0, 0, 0, false);
+            let mut vmm = VM::flash(c.bytecode(), 240, 160, 240 * 160, false);
             let mut cycles = 0;
             while cycles < test.expected_cycles {
                 let result = vmm.execute();
