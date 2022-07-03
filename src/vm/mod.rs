@@ -863,6 +863,17 @@ mod tests {
     }
 
     #[test]
+    fn test_arithmetic_3() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Number(9.0)),
+            input: "10 - 2 / 2 + 5".to_string(),
+            expected_cycles: 15,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
     fn test_array_add_reduce() {
         let tests: Vec<VMTestCase> = vec![VMTestCase {
             expected_top: Some(Object::Number(15.0)),
@@ -883,6 +894,20 @@ mod tests {
             ])),
             input: "[[1, 2, 3],5]\\+".to_string(),
             expected_cycles: 17,
+        }];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_array_add_inner_arrays() {
+        let tests: Vec<VMTestCase> = vec![VMTestCase {
+            expected_top: Some(Object::Array(vec![
+                Object::Array(vec![Object::Number(6.0), Object::Number(8.0)]),
+                Object::Array(vec![Object::Number(10.0), Object::Number(12.0)]),
+            ])),
+            input: "[[1, 2], [3, 4]] + [[5,6],[7,8]]".to_string(),
+            expected_cycles: 31,
         }];
 
         run_vm_test(tests);
