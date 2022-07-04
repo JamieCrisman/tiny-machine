@@ -43,7 +43,7 @@ pub enum TokenType {
     NOTEQUAL,
     WHILE,
     PISET, // switch to built in function
-    // PIGET, 
+           // PIGET,
 }
 
 #[derive(PartialEq, Clone, Debug)]

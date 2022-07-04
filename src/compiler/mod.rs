@@ -181,8 +181,7 @@ impl Compiler {
             // Expression::Call { args, func } => self.compile_call(args, func),
             Expression::Call { args: _, func: _ } => {
                 Err(CompileError::Reason("Not Implemented".to_string()))
-            }
-            // _ => Err(CompileError::Reason("Not Implemented".to_string())),
+            } // _ => Err(CompileError::Reason("Not Implemented".to_string())),
         }
     }
 
