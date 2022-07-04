@@ -1,5 +1,9 @@
 # Explorations
 
+## Why wrote a programming language?
+
+Because I find it interesting. Integrating Lua or some other language would probably be easier.
+
 ## Arithmetic Evaluation
 
 > Implemented

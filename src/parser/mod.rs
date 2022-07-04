@@ -67,8 +67,8 @@ impl Parser {
         match self.peek_token_type {
             TokenType::ASSIGN => self.parse_let_statement(),
             TokenType::WHILE => self.parse_while_statement(),
-            // TokenType::RETURN => self.parse_return_statement(),
             _ => match self.cur_token_type {
+                TokenType::RETURN => self.parse_return_statement(),
                 TokenType::WHILE => self.parse_while_statement(),
                 _ => self.parse_expression_statement(),
             },
@@ -76,15 +76,7 @@ impl Parser {
     }
 
     fn parse_let_statement(&mut self) -> Option<Statement> {
-        // match self.cur_token.as_ref().unwrap().token_type {
-        //     TokenType::IDENTIFIER(_) => self.next_token(),
-        //     _ => {
-        //         self.peek_error(TokenType::IDENTIFIER(String::from("any")));
-        //         return None;
-        //     }
-        // }
-
-        let ident = match self.parse_ident() {
+        let ident = match self.parse_identifier() {
             Some(name) => name,
             None => return None,
         };
@@ -96,40 +88,48 @@ impl Parser {
         self.next_token();
 
         let expression = match self.parse_expression(Precedence::Lowest) {
-            Some(expr) => Some(expr),
+            Some(expr) => match expr {
+                Expression::Func {
+                    params,
+                    body,
+                    name: _, // functions name comes from the ident
+                } => Some(Expression::Func {
+                    params,
+                    body,
+                    name: ident.0.clone(),
+                }),
+                _ => Some(expr),
+            },
             None => {
                 self.errors.push(format!(
                     "could not parse assign statement: '{}'",
                     self.cur_token.as_ref().unwrap().lexeme,
-                    // self.cur_token.as_ref().unwrap().line
                 ));
                 return None;
             }
         };
 
-        if self.peek_token.is_some()
-            && self.peek_token.as_ref().unwrap().token_type == TokenType::SEMICOLON
-        {
+        if self.peek_token.is_some() && self.peek_token_type == TokenType::SEMICOLON {
             self.next_token();
         }
 
         Some(Statement::Let(ident, expression.unwrap()))
     }
 
-    // fn parse_return_statement(&mut self) -> Option<Statement> {
-    //     self.next_token();
+    fn parse_return_statement(&mut self) -> Option<Statement> {
+        self.next_token();
 
-    //     let expression = match self.parse_expression(Precedence::Lowest) {
-    //         Some(expr) => expr,
-    //         None => return None,
-    //     };
+        let expression = match self.parse_expression(Precedence::Lowest) {
+            Some(expr) => expr,
+            None => return None,
+        };
 
-    //     if self.peek_token == TokenType::SEMICOLON {
-    //         self.next_token();
-    //     }
+        if self.peek_token_type == TokenType::SEMICOLON {
+            self.next_token();
+        }
 
-    //     Some(Statement::Return(expression))
-    // }
+        Some(Statement::Return(expression))
+    }
 
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let expression = self.parse_expression(Precedence::Lowest);
@@ -165,7 +165,7 @@ impl Parser {
             TokenType::IF => self.parse_if_expression(),
             //TokenType::WHILE => self.parse_while_expression(),
             TokenType::PISET => self.parse_piset_expression(),
-            // TokenType::FUNCTION => self.parse_func_expression(),
+            TokenType::FUNCTION => self.parse_func_expression(),
             _ => {
                 // self.error_no_prefix_Parser();
                 None
@@ -213,48 +213,48 @@ impl Parser {
                 TokenType::REDUCE => {
                     left_expression = self.parse_postfix_expression(left_expression.unwrap());
                 }
-                // TokenType::LPAREN => {
-                //     self.next_token();
-                //     left_expression = self.parse_call_expression(left_expression.unwrap());
-                // }
+                TokenType::LPAREN => {
+                     self.next_token();
+                     left_expression = self.parse_call_expression(left_expression.unwrap());
+                }
                 _ => return left_expression,
             }
         }
         left_expression
     }
 
-    // fn parse_call_expression(&mut self, func: Expression) -> Option<Expression> {
-    //     let args = match self.parse_expression_list(TokenType::RPAREN) {
-    //         Some(args) => args,
-    //         None => return None,
-    //     };
+    fn parse_call_expression(&mut self, func: Expression) -> Option<Expression> {
+        let args = match self.parse_expression_list(TokenType::RPAREN) {
+            Some(args) => args,
+            None => return None,
+        };
 
-    //     Some(Expression::Call {
-    //         func: Box::new(func),
-    //         args,
-    //     })
-    // }
+        Some(Expression::Call {
+            func: Box::new(func),
+            args,
+        })
+    }
 
-    // fn parse_func_expression(&mut self) -> Option<Expression> {
-    //     if !self.expect_peek(TokenType::LPAREN) {
-    //         return None;
-    //     }
+    fn parse_func_expression(&mut self) -> Option<Expression> {
+        if !self.expect_peek(TokenType::LPAREN) {
+            return None;
+        }
 
-    //     let params = match self.parse_func_params() {
-    //         Some(params) => params,
-    //         None => return None,
-    //     };
+        let params = match self.parse_func_params() {
+            Some(params) => params,
+            None => return None,
+        };
 
-    //     if !self.expect_peek(TokenType::LBRACE) {
-    //         return None;
-    //     }
+        if !self.expect_peek(TokenType::LBRACE) {
+            return None;
+        }
 
-    //     Some(Expression::Func {
-    //         params,
-    //         body: self.parse_block_statement(),
-    //         name: String::from(""),
-    //     })
-    // }
+        Some(Expression::Func {
+            params,
+            body: self.parse_block_statement(),
+            name: String::from(""), // gets named later
+        })
+    }
 
     // fn parse_hash_expr(&mut self) -> Option<Expression> {
     //     let mut pairs = Vec::new();
@@ -329,36 +329,36 @@ impl Parser {
         })
     }
 
-    // fn parse_func_params(&mut self) -> Option<Vec<Expression>> {
-    //     let mut params = vec![];
-    //     if self.peek_token_type == TokenType::RPAREN {
-    //         self.next_token();
-    //         return Some(params);
-    //     }
+    fn parse_func_params(&mut self) -> Option<Vec<Identifier>> {
+        let mut params = vec![];
+        if self.peek_token_type == TokenType::RPAREN {
+            self.next_token();
+            return Some(params);
+        }
 
-    //     self.next_token();
+        self.next_token();
 
-    //     match self.parse_expression(Precedence::Lowest) {
-    //         Some(exp) => params.push(exp),
-    //         None => return None,
-    //     }
+        match self.parse_identifier() {
+            Some(exp) => params.push(exp),
+            None => return None,
+        }
 
-    //     while self.peek_token_type == TokenType::COMMA {
-    //         self.next_token();
-    //         self.next_token();
+        while self.peek_token_type == TokenType::COMMA {
+            self.next_token();
+            self.next_token();
 
-    //         match self.parse_expression(Precedence::Lowest) {
-    //             Some(exp) => params.push(exp),
-    //             None => return None,
-    //         }
-    //     }
+            match self.parse_identifier() {
+                Some(exp) => params.push(exp),
+                None => return None,
+            }
+        }
 
-    //     if !self.expect_peek(TokenType::RPAREN) {
-    //         return None;
-    //     }
+        if !self.expect_peek(TokenType::RPAREN) {
+            return None;
+        }
 
-    //     Some(params)
-    // }
+        Some(params)
+    }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut list = vec![];
@@ -603,7 +603,7 @@ impl Parser {
         // }
     }
 
-    fn parse_ident(&mut self) -> Option<Identifier> {
+    fn parse_identifier(&mut self) -> Option<Identifier> {
         match self.cur_token_type {
             TokenType::IDENTIFIER(ref mut ident) => Some(Identifier(ident.clone())),
             _ => None,
@@ -611,7 +611,7 @@ impl Parser {
     }
 
     fn parse_ident_expression(&mut self) -> Option<Expression> {
-        self.parse_ident().map(Expression::Identifier)
+        self.parse_identifier().map(Expression::Identifier)
     }
 
     fn parse_bool_expr(&mut self) -> Option<Expression> {
@@ -1060,6 +1060,107 @@ mod tests {
 
         assert_eq!(ast, expected_ast);
     }
+
+    #[test]
+    fn test_return_statement() {
+        let input = String::from(
+            r#"
+            return 5;
+            return 10;
+            return 838383;
+            return a;
+        "#,
+        );
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![
+            Statement::Return(Expression::Literal(Literal::Number(5.0))),
+            Statement::Return(Expression::Literal(Literal::Number(10.0))),
+            Statement::Return(Expression::Literal(Literal::Number(838383.0))),
+            Statement::Return(Expression::Identifier(Identifier(String::from("a")))),
+        ];
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
+
+    #[test]
+    fn test_func_expression() {
+        let input = String::from(
+            r#"
+            fn(x,y) {x + y}
+            fn(x) {x}
+            fn() {x}
+        "#,
+        );
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![
+            Statement::Expression(Expression::Func {
+                params: vec![Identifier(String::from("x")), Identifier(String::from("y"))],
+                body: vec![Statement::Expression(Expression::Infix(
+                    Infix::Plus,
+                    Box::new(Expression::Identifier(Identifier(String::from("x")))),
+                    Box::new(Expression::Identifier(Identifier(String::from("y")))),
+                ))],
+                name: String::from(""),
+            }),
+            Statement::Expression(Expression::Func {
+                params: vec![Identifier(String::from("x"))],
+                body: vec![Statement::Expression(Expression::Identifier(Identifier(
+                    String::from("x"),
+                )))],
+                name: String::from(""),
+            }),
+            Statement::Expression(Expression::Func {
+                params: vec![],
+                body: vec![Statement::Expression(Expression::Identifier(Identifier(
+                    String::from("x"),
+                )))],
+                name: String::from(""),
+            }),
+        ];
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
+
+    #[test]
+    fn test_call_expression() {
+        let input = String::from("add(1, 2*3, 4+5);");
+        let l = Lexer::new(input);
+        let mut parser = Parser::new(l);
+        let ast = parser.build_ast();
+        let errors = parser.errors();
+
+        let expected_ast: Vec<Statement> = vec![Statement::Expression(Expression::Call {
+            func: Box::new(Expression::Identifier(Identifier(String::from("add")))),
+            args: vec![
+                Expression::Literal(Literal::Number(1.0)),
+                Expression::Infix(
+                    Infix::Multiply,
+                    Box::new(Expression::Literal(Literal::Number(2.0))),
+                    Box::new(Expression::Literal(Literal::Number(3.0))),
+                ),
+                Expression::Infix(
+                    Infix::Plus,
+                    Box::new(Expression::Literal(Literal::Number(4.0))),
+                    Box::new(Expression::Literal(Literal::Number(5.0))),
+                ),
+            ],
+        })];
+
+        assert_eq!(errors.len(), 0, "{:?}", errors);
+
+        assert_eq!(ast, expected_ast);
+    }
+
     #[test]
     fn test_reduce() {
         let input =

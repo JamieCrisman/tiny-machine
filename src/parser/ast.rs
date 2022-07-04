@@ -31,7 +31,6 @@ impl fmt::Display for Statement {
             Self::Let(i, e) => write!(f, "{} <- {};", i.0, e),
             Self::Return(e) => write!(f, "return {};", e),
             Self::Expression(e) => write!(f, "{}", e),
-            //Self::If(e,b,bc) => write!(f, "{} {:?} {:?}", e, b, bc),
             Self::While(e, b) => write!(f, "{} {:?}", e, b),
             // _ => write!(f, "D:"),
         }
@@ -59,15 +58,16 @@ pub enum Expression {
     // TODO: generalize this
     Piset {
         params: Vec<Expression>,
-    }, // Func {
-       //     params: Vec<Ident>,
-       //     body: BlockStatement,
-       //     name: String,
-       // },
-       // Call {
-       //     func: Box<Expression>,
-       //     args: Vec<Expression>,
-       // },
+    },
+    Func {
+        params: Vec<Identifier>,
+        body: BlockStatement,
+        name: String,
+    },
+    Call {
+        func: Box<Expression>,
+        args: Vec<Expression>,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -88,24 +88,6 @@ impl fmt::Display for Expression {
             Self::Piset { params } => {
                 write!(f, "piset({:?})", params)
             }
-            //Self::While {
-            //     condition: _,
-            //     body: _,
-            // } => {
-            //     write!(
-            //         f,
-            //         "TODO // Can't implement display for Vec, need to wrap it"
-            //     )
-            //     //                if (alternative.is_some()) {
-            //     //                    write!(
-            //     //                        f,
-            //     //                        "if ({}) {{\n\t{}\n}} else {{\n\t{}}}",
-            //     //                        condition, consequence, alternative
-            //     //                    )
-            //     //                } else {
-            //     //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
-            //     //                }
-            // }
             Self::If {
                 condition: _,
                 consequence: _,
@@ -125,16 +107,16 @@ impl fmt::Display for Expression {
                 //                    write!(f, "if ({}) {{\n\t{}\n}}", condition, consequence)
                 //      //                }
             }
-            // Self::Func {
-            //     params: _,
-            //     body: _,
-            //     name: _,
-            // } => {
-            //     write!(f, "Todo")
-            // }
-            // Self::Call { func: _, args: _ } => {
-            //     write!(f, "todo")
-            // }
+            Self::Func {
+                params: _,
+                body: _,
+                name: _,
+            } => {
+                write!(f, "Todo")
+            }
+            Self::Call { func: _, args: _ } => {
+                write!(f, "todo")
+            }
             Self::Index(_exp, _exp2) => {
                 write!(f, "todo")
             }
@@ -155,8 +137,6 @@ impl fmt::Display for Prefix {
         match *self {
             Prefix::Minus => write!(f, "-"),
             Prefix::Bang => write!(f, "-"),
-            // Prefix::Swap => write!(f, "⍨"),
-            // Prefix::Tally => write!(f, "≢"),
         }
     }
 }
@@ -176,7 +156,6 @@ impl fmt::Display for PostfixModifier {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Postfix {
-    // Tally,
     Modifier(PostfixModifier, Box<Expression>),
 }
 
@@ -229,10 +208,6 @@ impl fmt::Display for Infix {
             Infix::Minus => write!(f, "-"),
             Infix::Divide => write!(f, "/"),
             Infix::Multiply => write!(f, "*"),
-            // Infix::FirstPick => write!(f, "⊒"),
-            // Infix::FloorMin => write!(f, "⌋"),
-            // Infix::CeilMax => write!(f, "⌉"),
-            // Infix::MagMod => write!(f, "|"),
             Infix::And => write!(f, "∧"),
             Infix::Or => write!(f, "∨"),
             Infix::GreaterThan => write!(f, ">"),
@@ -241,15 +216,6 @@ impl fmt::Display for Infix {
             Infix::NotEqual => write!(f, "!="),
             Infix::LessThan => write!(f, "<"),
             Infix::LessThanEqual => write!(f, "≤"),
-            // Infix::Reduce => write!(f, "\\"),
-            // Infix::Without => write!(f, "~"),
-            // Infix::Modifier(modifier, infix) => write!(f, "{}{}", modifier, infix),
-            // Infix::Eq => write!(f, "=="),
-            // Infix::Ne => write!(f, "!="),
-            // Infix::Gte => write!(f, ">="),
-            // Infix::Gt => write!(f, ">"),
-            // Infix::Lte => write!(f, "<="),
-            // Infix::Lt => write!(f, "<"),
         }
     }
 }
@@ -293,14 +259,8 @@ pub fn precedence_of(t: TT) -> Precedence {
     match t {
         TT::PLUS
         | TT::MINUS
-        // | TT::SWAP
-        // | TT::WITHOUT
-        // | TT::FIRSTPICK
-        // | TT::FLOORMIN
-        // | TT::CEILMAX
         | TT::AND
         | TT::OR
-        // | TT::MAGMOD
         | TT::LESSTHAN
         | TT::LESSTHANEQUAL
         | TT::GREATERTHAN
@@ -308,11 +268,7 @@ pub fn precedence_of(t: TT) -> Precedence {
         // Maybe raise precedence for comparisons?
         | TT::NOTEQUAL
         | TT::EQUAL => Precedence::Sum,
-        // TT::EQ | TT::NE => Precedence::Equals,
         TT::ASTERISK | TT::SLASH => Precedence::Sum,
-        // TT::LT | TT::GT => Precedence::LessGreater,
-        // TT::LTE | TT::GTE => Precedence::LessGreater,
-        // TT::TALLY => Precedence::Prefix,
         TT::BANG => Precedence::Prefix,
         TT::REDUCE => Precedence::Product,
         TT::LBRACKET => Precedence::Index,

@@ -173,7 +173,15 @@ impl Compiler {
             Expression::Index(expr, ind_expr) => self.compile_index(*expr, *ind_expr),
             Expression::Piset { params } => self.compile_piset(params),
             // Expression::Func { params, body, name } => self.compile_function(params, body, name),
+            Expression::Func {
+                params: _,
+                body: _,
+                name: _,
+            } => Err(CompileError::Reason("Not Implemented".to_string())),
             // Expression::Call { args, func } => self.compile_call(args, func),
+            Expression::Call { args: _, func: _ } => {
+                Err(CompileError::Reason("Not Implemented".to_string()))
+            }
             // _ => Err(CompileError::Reason("Not Implemented".to_string())),
         }
     }

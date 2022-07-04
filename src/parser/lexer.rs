@@ -104,13 +104,6 @@ impl Lexer {
                 '/' => TT::SLASH,
                 '*' => TT::ASTERISK,
                 '\\' => TT::REDUCE,
-                // '≢' => TT::TALLY,
-                // '⍨' => TT::SWAP,
-                // '~' => TT::WITHOUT,
-                // '⊒' => TT::FIRSTPICK,
-                // '⌉' => TT::CEILMAX,
-                // '⌋' => TT::FLOORMIN,
-                // '|' => TT::MAGMOD,
                 '∧' => TT::AND,
                 '∨' => TT::OR,
                 '!' => {
@@ -122,8 +115,6 @@ impl Lexer {
                         TT::BANG
                     }
                 }
-                // '>' => TT::GREATERTHAN,
-                // '≥' => TT::GREATERTHANEQUAL,
                 '>' => {
                     let peeked = self.peek_char();
                     if peeked.is_some() && peeked.unwrap() == '=' {
@@ -143,7 +134,6 @@ impl Lexer {
                         TT::LESSTHANEQUAL
                     } else {
                         TT::LESSTHAN
-                        // TT::ILLEGAL
                     }
                 }
                 '≤' => TT::LESSTHANEQUAL,
@@ -156,16 +146,13 @@ impl Lexer {
                     if is_letter(x) {
                         let literal = self.read_identifier();
                         match literal.as_str() {
-                            //    "fn" => Token::FUNCTION,
-                            //    "let" => Token::LET,
-                            //    "true" => Token::BOOL(true),
-                            //    "false" => Token::BOOL(false),
+                            "fn" => TT::FUNCTION,
                             "while" => TT::WHILE,
                             "if" => TT::IF,
                             "else" => TT::ELSE,
                             "piset" => TT::PISET,
                             // "piget" => TT::PIGET,
-                            //    "return" => Token::RETURN,
+                            "return" => TT::RETURN,
                             _ => TT::IDENTIFIER(literal),
                         }
                     } else if is_digit(x) {

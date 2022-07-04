@@ -27,19 +27,11 @@ pub enum TokenType {
     RBRACE,
     LBRACKET,
     RBRACKET,
-    // FUNCTION,
-    // LET,
+    FUNCTION,
     IF,
     ELSE,
-    // RETURN,
+    RETURN,
     REDUCE,
-    // TALLY,
-    // SWAP,
-    // WITHOUT,
-    // FIRSTPICK,
-    // CEILMAX,
-    // FLOORMIN,
-    // MAGMOD,
     AND,
     OR,
 
@@ -50,8 +42,8 @@ pub enum TokenType {
     EQUAL,
     NOTEQUAL,
     WHILE,
-    PISET,
-    PIGET,
+    PISET, // switch to built in function
+    // PIGET, 
 }
 
 #[derive(PartialEq, Clone, Debug)]
