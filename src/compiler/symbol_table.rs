@@ -1,17 +1,17 @@
 // use crate::builtins::new_builtins;
-use std::cell::RefCell;
+
+use std::borrow::BorrowMut;
 use std::collections::hash_map::{Iter, IterMut};
 use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::rc::Rc;
+//use std::ops::{DerefMut, Deref};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolScope {
     Global,
     Local,
-    // BuiltIn,
+    BuiltIn,
     Free,
-    // Function,
+    Function,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,34 +25,23 @@ pub struct Symbol {
 pub struct SymbolTable {
     store: HashMap<String, Symbol>,
     pub num_definitions: usize,
-    pub outer: Option<Rc<RefCell<SymbolTable>>>,
+    pub outer: Option<Box<SymbolTable>>,
     pub free_symbols: Vec<Symbol>,
 }
 
-// We're going to use this to determine whether or not we should
-// be allowed to access the last element of SymbolTable.store
-#[derive(Clone)]
-pub struct StoreNotEmpty(PhantomData<SymbolTable>);
-impl StoreNotEmpty {
-    pub fn new(tbl: &SymbolTable) -> Option<Self> {
-        if tbl.store_len() > 0 {
-            Some(StoreNotEmpty(PhantomData))
-        } else {
-            None
-        }
-    }
-}
+// Probably not necessary now, but it's little work for a lot of gain.
+// impl Deref for SymbolTable {
+//     type Target = SymbolTable;
+//     fn deref(&self) -> &Self::Target {
+//         Deref::deref(&self)
+//     }
+// }
 
-impl From<Rc<SymbolTable>> for SymbolTable {
-    fn from(s: Rc<SymbolTable>) -> Self {
-        SymbolTable {
-            store: s.store.clone(),
-            num_definitions: s.num_definitions,
-            outer: s.outer.clone(),
-            free_symbols: s.free_symbols.clone(),
-        }
-    }
-}
+// impl DerefMut for SymbolTable {
+//     fn deref_mut(&mut self) -> &mut SymbolTable {
+//         DerefMut::deref_mut(&mut self)
+//     }
+// }
 
 impl SymbolTable {
     // pub fn new_with_builtins() -> Self {
@@ -77,18 +66,13 @@ impl SymbolTable {
         }
     }
 
-    // pub fn new_with_outer(outer: Rc<RefCell<SymbolTable>>) -> Self {
-    //     Self {
-    //         store: HashMap::new(),
-    //         num_definitions: 0,
-    //         outer: Some(outer),
-    //         free_symbols: vec![],
-    //     }
-    // }
-
-    pub fn last_symbol(&self, _proof: StoreNotEmpty) -> (usize, String) {
-        let symbol = self.store.values().last().unwrap().clone();
-        (symbol.index, symbol.name)
+    pub fn new_with_outer(outer: Box<SymbolTable>) -> Self {
+        Self {
+            store: HashMap::new(),
+            num_definitions: 0,
+            outer: Some(outer),
+            free_symbols: vec![],
+        }
     }
 
     pub fn store_len(&self) -> usize {
@@ -117,15 +101,15 @@ impl SymbolTable {
     //     result
     // }
 
-    // pub fn define_function(&mut self, name: String) -> Symbol {
-    //     let result = Symbol {
-    //         name: String::from(name),
-    //         index: 0,
-    //         scope: SymbolScope::Function,
-    //     };
-    //     self.store.insert(result.name.clone(), result.clone());
-    //     result
-    // }
+    pub fn define_function(&mut self, name: String) -> Symbol {
+        let result = Symbol {
+            name,
+            index: 0,
+            scope: SymbolScope::Function,
+        };
+        self.store.insert(result.name.clone(), result.clone());
+        result
+    }
 
     pub fn define_free(&mut self, original: Symbol) -> Symbol {
         self.free_symbols.push(original.clone());
@@ -162,8 +146,8 @@ impl SymbolTable {
     pub fn resolve(&mut self, name: String) -> Option<Symbol> {
         let res = match self.store.get(&name) {
             Some(value) => return Some(value.clone()),
-            None => match self.outer {
-                Some(ref outer) => outer.borrow_mut().resolve(name),
+            None => match self.outer.borrow_mut() {
+                Some(outer) => outer.as_mut().resolve(name),
                 None => None,
             },
         };

@@ -41,10 +41,10 @@ pub enum Opcode {
     Return = 23,
     GetLocal = 24,
     SetLocal = 25,
-    // BuiltinFunc = 26,
-    // Closure = 27,
-    // GetFree = 28,
-    // CurrentClosure = 29,
+    BuiltinFunc = 26,
+    Closure = 27,
+    GetFree = 28,
+    CurrentClosure = 29,
     Reduce = 30,
     // Tally = 31,
     // Swap = 32,
@@ -108,10 +108,10 @@ impl From<u8> for Opcode {
             23 => Opcode::Return,
             24 => Opcode::GetLocal,
             25 => Opcode::SetLocal,
-            // 26 => Opcode::BuiltinFunc,
-            // 27 => Opcode::Closure,
-            // 28 => Opcode::GetFree,
-            // 29 => Opcode::CurrentClosure,
+            26 => Opcode::BuiltinFunc,
+            27 => Opcode::Closure,
+            28 => Opcode::GetFree,
+            29 => Opcode::CurrentClosure,
             30 => Opcode::Reduce,
             // 31 => Opcode::Tally,
             // 32 => Opcode::Swap,
@@ -164,10 +164,10 @@ impl Opcode {
             Opcode::SetLocal
             | Opcode::GetLocal
             | Opcode::Call
-            // | Opcode::BuiltinFunc
-            // | Opcode::GetFree 
+            | Opcode::BuiltinFunc
+            | Opcode::GetFree
             => vec![1],
-            // Opcode::Closure => Some(vec![2, 1]),
+            Opcode::Closure => vec![2, 1],
             Opcode::Add
             | Opcode::Divide
             | Opcode::Subtract
@@ -185,7 +185,7 @@ impl Opcode {
             | Opcode::ReturnValue
             | Opcode::Return
             | Opcode::Piset
-            // | Opcode::CurrentClosure
+            | Opcode::CurrentClosure
             | Opcode::Reduce
             // | Opcode::Tally
             // | Opcode::Swap
@@ -229,9 +229,9 @@ impl Opcode {
             | Opcode::GetLocal
             | Opcode::Call
             | Opcode::Hash
-            // | Opcode::Closure
-            // | Opcode::BuiltinFunc
-            // | Opcode::GetFree 
+            | Opcode::Closure
+            | Opcode::BuiltinFunc
+            | Opcode::GetFree
             => self.widths().iter().sum::<i16>() as usize, // expensive way to say 1,2
             Opcode::Add
             | Opcode::Divide
@@ -249,7 +249,7 @@ impl Opcode {
             | Opcode::Index
             | Opcode::ReturnValue
             | Opcode::Return
-            // | Opcode::CurrentClosure
+            | Opcode::CurrentClosure
             | Opcode::Reduce
             // | Opcode::Tally
             // | Opcode::Swap

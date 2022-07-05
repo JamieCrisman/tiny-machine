@@ -356,6 +356,10 @@ impl VM {
                 self.execute_piset()?;
                 1
             }
+            Opcode::BuiltinFunc => todo!(),
+            Opcode::Closure => todo!(),
+            Opcode::GetFree => todo!(),
+            Opcode::CurrentClosure => todo!(),
         };
 
         if self.debug {

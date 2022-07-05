@@ -1,4 +1,9 @@
+pub mod builtin;
+pub mod envir;
 pub mod symbol_table;
+
+use core::cell::RefCell;
+use std::rc::Rc;
 use std::{
     borrow::BorrowMut,
     fmt::{self, Display},
@@ -17,7 +22,8 @@ use crate::{
     },
 };
 
-use self::symbol_table::SymbolTable;
+use self::envir::Envir;
+use self::{builtin::BuiltInFunction, symbol_table::SymbolTable};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Instructions {
@@ -146,14 +152,14 @@ impl Compiler {
                 match symbol.scope {
                     symbol_table::SymbolScope::Global => self.emit(Opcode::GetGlobal, val),
                     symbol_table::SymbolScope::Local => self.emit(Opcode::GetLocal, val),
-                    // symbol_table::SymbolScope::BuiltIn => self.emit(Opcode::BuiltinFunc, val),
-                    // symbol_table::SymbolScope::Free => self.emit(Opcode::GetFree, val),
-                    // symbol_table::SymbolScope::Function => self.emit(Opcode::CurrentClosure, None),
-                    _ => {
-                        return Err(CompileError::Reason(String::from(
-                            "Unimplemented symbol scope",
-                        )))
-                    }
+                    symbol_table::SymbolScope::BuiltIn => self.emit(Opcode::BuiltinFunc, val),
+                    symbol_table::SymbolScope::Free => self.emit(Opcode::GetFree, val),
+                    symbol_table::SymbolScope::Function => self.emit(Opcode::CurrentClosure, None),
+                    // _ => {
+                    //     return Err(CompileError::Reason(String::from(
+                    //         "Unimplemented symbol scope",
+                    //     )))
+                    // }
                 };
                 Ok(())
             }
@@ -172,12 +178,7 @@ impl Compiler {
             //} => self.compile_while(condition, body),
             Expression::Index(expr, ind_expr) => self.compile_index(*expr, *ind_expr),
             Expression::Piset { params } => self.compile_piset(params),
-            // Expression::Func { params, body, name } => self.compile_function(params, body, name),
-            Expression::Func {
-                params: _,
-                body: _,
-                name: _,
-            } => Err(CompileError::Reason("Not Implemented".to_string())),
+            Expression::Func { params, body, name } => self.compile_function(params, body, name),
             // Expression::Call { args, func } => self.compile_call(args, func),
             Expression::Call { args: _, func: _ } => {
                 Err(CompileError::Reason("Not Implemented".to_string()))
@@ -402,6 +403,90 @@ impl Compiler {
             self.scopes[self.scope_index].previous_instruction.clone();
     }
 
+    fn compile_function(
+        &mut self,
+        params: Vec<Identifier>,
+        body: BlockStatement,
+        name: String,
+    ) -> Result<(), CompileError> {
+        self.enter_scope();
+        if !name.is_empty() {
+            self.symbol_table.borrow_mut().define_function(name);
+        }
+        let param_len = params.len() as i32;
+        for p in params {
+            self.symbol_table.borrow_mut().define(p.0.as_str());
+        }
+
+        self.compile(body)?;
+        if self.last_instruction_is(Opcode::Pop) {
+            self.replace_last_pop_with_return();
+        }
+        if !self.last_instruction_is(Opcode::ReturnValue) {
+            self.emit(Opcode::Return, None);
+        }
+        let num_locals = self.symbol_table.num_definitions;
+        let free_symbols = self.symbol_table.free_symbols.clone();
+        let instr = self.leave_scope();
+
+        for sym in free_symbols.iter() {
+            self.load_symbol(sym.clone());
+        }
+
+        let compiled_fn = Object::CompiledFunction {
+            instructions: instr,
+            num_locals: num_locals as i32,
+            num_parameters: param_len,
+        };
+        let constant_val = Some(vec![
+            self.add_constant(compiled_fn) as i32,
+            free_symbols.len() as i32,
+        ]);
+        self.emit(Opcode::Closure, constant_val);
+        Ok(())
+    }
+
+    fn load_symbol(&mut self, symbol: symbol_table::Symbol) {
+        match symbol.scope {
+            symbol_table::SymbolScope::Global => {
+                self.emit(Opcode::GetGlobal, Some(vec![symbol.index as i32]))
+            }
+            symbol_table::SymbolScope::Local => {
+                self.emit(Opcode::GetLocal, Some(vec![symbol.index as i32]))
+            }
+            symbol_table::SymbolScope::BuiltIn => {
+                self.emit(Opcode::BuiltinFunc, Some(vec![symbol.index as i32]))
+            }
+            symbol_table::SymbolScope::Free => {
+                self.emit(Opcode::GetFree, Some(vec![symbol.index as i32]))
+            }
+            symbol_table::SymbolScope::Function => self.emit(Opcode::CurrentClosure, None),
+        };
+    }
+
+    fn replace_last_pop_with_return(&mut self) {
+        let last_pos = self.scopes[self.scope_index]
+            .last_instruction
+            .as_ref()
+            .unwrap()
+            .position;
+
+        self.replace_instruction(
+            last_pos,
+            EmittedInstruction {
+                op: Opcode::ReturnValue,
+                operands: None,
+                // this might not be right
+                position: last_pos,
+            },
+        );
+        self.scopes[self.scope_index]
+            .last_instruction
+            .as_mut()
+            .unwrap()
+            .op = Opcode::ReturnValue;
+    }
+
     fn compile_return(&mut self, e: Expression) -> Result<(), CompileError> {
         self.compile_expression(e)?;
         self.emit(Opcode::ReturnValue, None);
@@ -509,6 +594,32 @@ impl Compiler {
             }
         };
         Ok(())
+    }
+
+    fn enter_scope(&mut self) {
+        let scope = CompilationScope {
+            instructions: vec![],
+            last_instruction: None,
+            previous_instruction: None,
+        };
+        self.scopes.push(scope);
+        self.scope_index += 1;
+        let new_table = SymbolTable::new_with_outer(Box::new(self.symbol_table.to_owned()));
+        self.symbol_table = new_table;
+    }
+
+    fn leave_scope(&mut self) -> Instructions {
+        let Bytecode {
+            instructions: result,
+            constants: _,
+        } = self.bytecode();
+
+        self.scopes.pop();
+        self.scope_index -= 1;
+        let outer = self.symbol_table.outer.as_ref().unwrap();
+        self.symbol_table = *outer.to_owned();
+        // TODO: drop? inner?
+        result
     }
 
     pub fn bytecode(&self) -> Bytecode {
@@ -640,20 +751,20 @@ pub enum Object {
     // Bool(bool),
     Array(Vec<Object>),
     // Hash(HashMap<Object, Object>),
-    // Func(Vec<Ident>, BlockStatement, Rc<RefCell<Env>>, String),
-    // Builtin(i32, BuiltInFunc),
+    Func(Vec<Identifier>, BlockStatement, Rc<RefCell<Envir>>, String),
+    Builtin(i32, BuiltInFunction),
     Null,
-    // ReturnValue(Box<Object>),
+    ReturnValue(Box<Object>),
     // Error(String),
-    // CompiledFunction {
-    //     instructions: Instructions,
-    //     num_locals: i32,
-    //     num_parameters: i32,
-    // },
-    // Closure {
-    //     Fn: Box<Object>, // technically specifically ObjectCompiledFunction
-    //     Free: Vec<Object>,
-    // },
+    CompiledFunction {
+        instructions: Instructions,
+        num_locals: i32,
+        num_parameters: i32,
+    },
+    Closure {
+        Fn: Box<Object>, // technically specifically ObjectCompiledFunction
+        Free: Vec<Object>,
+    },
 }
 
 impl Object {
@@ -665,17 +776,17 @@ impl Object {
             // Object::Bool(_) => ObjectType::Bool,
             Object::Array(_) => ObjectType::Array,
             // Object::Hash(_) => ObjectType::Hash,
-            // Object::Func(_, _, _, _) => ObjectType::Func,
-            // Object::Builtin(_, _) => ObjectType::Builtin,
+            Object::Func(_, _, _, _) => ObjectType::Func,
+            Object::Builtin(_, _) => ObjectType::Builtin,
             Object::Null => ObjectType::Null,
-            // Object::ReturnValue(_) => ObjectType::ReturnValue,
+            Object::ReturnValue(_) => ObjectType::ReturnValue,
             // Object::Error(_) => ObjectType::Error,
-            // Object::CompiledFunction {
-            // instructions: _,
-            // num_locals: _,
-            // num_parameters: _,
-            // } => ObjectType::CompiledFunction,
-            // Object::Closure { Fn: _, Free: _ } => ObjectType::Closure,
+            Object::CompiledFunction {
+                instructions: _,
+                num_locals: _,
+                num_parameters: _,
+            } => ObjectType::CompiledFunction,
+            Object::Closure { Fn: _, Free: _ } => ObjectType::Closure,
         }
     }
 }
@@ -687,13 +798,13 @@ pub enum ObjectType {
     // Bool,
     Array,
     // Hash,
-    // Func,
-    // Builtin,
+    Func,
+    Builtin,
     Null,
-    // ReturnValue,
+    ReturnValue,
     // Error,
-    // CompiledFunction,
-    // Closure,
+    CompiledFunction,
+    Closure,
     Symbol,
 }
 
@@ -706,13 +817,13 @@ impl fmt::Display for ObjectType {
             // Bool => "Bool".to_string(),
             Array => "Array".to_string(),
             // Hash => "Hash".to_string(),
-            // Func => "Func".to_string(),
-            // Builtin => "Builtin".to_string(),
+            Func => "Func".to_string(),
+            Builtin => "Builtin".to_string(),
             Null => "Null".to_string(),
-            // ReturnValue => "ReturnValue".to_string(),
+            ReturnValue => "ReturnValue".to_string(),
             // Error => "Error".to_string(),
-            // CompiledFunction => "CompiledFunction".to_string(),
-            // Closure => "Closure".to_string(),
+            CompiledFunction => "CompiledFunction".to_string(),
+            Closure => "Closure".to_string(),
             Symbol => "Symbol".to_string(),
         };
         write!(f, "{}", fmt_str)
@@ -748,31 +859,31 @@ impl fmt::Display for Object {
             //     }
             //     write!(f, "{{{}}}", result)
             // }
-            // Object::Func(ref params, _, _, _) => {
-            //     let mut result = String::new();
-            //     for (i, Ident(ref s)) in params.iter().enumerate() {
-            //         if i < 1 {
-            //             result.push_str(&format!("{}", s));
-            //         } else {
-            //             result.push_str(&format!(", {}", s));
-            //         }
-            //     }
-            //     write!(f, "{}({}) {{ ... }}", "func", result)
-            // }
-            // Object::Builtin(_, _) => write!(f, "[builtin function]"),
+            Object::Func(ref params, _, _, _) => {
+                let mut result = String::new();
+                for (i, Identifier(ref s)) in params.iter().enumerate() {
+                    if i < 1 {
+                        result.push_str(s);
+                    } else {
+                        result.push_str(&format!(", {}", s));
+                    }
+                }
+                write!(f, "func({}) {{ ... }}", result)
+            }
+            Object::Builtin(_, _) => write!(f, "[builtin function]"),
             Object::Null => write!(f, "null"),
-            // Object::ReturnValue(ref value) => write!(f, "{}", value),
+            Object::ReturnValue(ref value) => write!(f, "{}", value),
             // Object::Error(ref value) => write!(f, "{}", value),
-            // Object::Closure { Fn: _, Free: _ } => write!(f, "Closure"),
-            // Object::CompiledFunction {
-            //     instructions: _,
-            //     num_locals,
-            //     num_parameters,
-            // } => write!(
-            //     f,
-            //     "Compiled Function with {} locals and {} parameters",
-            //     num_locals, num_parameters
-            // ),
+            Object::Closure { Fn: _, Free: _ } => write!(f, "Closure"),
+            Object::CompiledFunction {
+                instructions: _,
+                num_locals,
+                num_parameters,
+            } => write!(
+                f,
+                "Compiled Function with {} locals and {} parameters",
+                num_locals, num_parameters
+            ),
         }
     }
 }
