@@ -339,10 +339,7 @@ impl VM {
                 1
             }
             Opcode::Call => {
-                let arg_count = *cur_instructions
-                    .data
-                    .get(ip + 1)
-                    .expect("expected byte") as i64;
+                let arg_count = *cur_instructions.data.get(ip + 1).expect("expected byte") as i64;
                 self.set_ip((ip + 1) as i64);
                 self.execute_call_function(arg_count)?;
 
@@ -363,10 +360,7 @@ impl VM {
                 2
             }
             Opcode::GetLocal => {
-                let local_index = *cur_instructions
-                    .data
-                    .get(ip + 1)
-                    .expect("expected byte") as i64;
+                let local_index = *cur_instructions.data.get(ip + 1).expect("expected byte") as i64;
                 self.set_ip((ip + 1) as i64);
                 let base_pointer = self.current_frame().base_pointer;
                 let val = self.stack[(base_pointer + local_index) as usize].clone();
@@ -374,10 +368,7 @@ impl VM {
                 2
             }
             Opcode::SetLocal => {
-                let local_index = *cur_instructions
-                    .data
-                    .get(ip + 1)
-                    .expect("expected byte") as i64;
+                let local_index = *cur_instructions.data.get(ip + 1).expect("expected byte") as i64;
                 self.set_ip((ip + 1) as i64);
                 let base_pointer = self.current_frame().base_pointer;
                 self.stack[(base_pointer + local_index) as usize] = self.pop();
@@ -389,10 +380,7 @@ impl VM {
                 1
             }
             Opcode::BuiltinFunc => {
-                let built_index = *cur_instructions
-                    .data
-                    .get(ip + 1)
-                    .expect("expected byte") as i64;
+                let built_index = *cur_instructions.data.get(ip + 1).expect("expected byte") as i64;
                 self.set_ip((ip + 1) as i64);
 
                 let def = self
@@ -411,19 +399,13 @@ impl VM {
                 ];
                 let const_index = u16::from_be_bytes(buff);
                 self.set_ip((ip + 2) as i64);
-                let num_free = *cur_instructions
-                    .data
-                    .get(ip + 3)
-                    .expect("expected byte") as i64;
+                let num_free = *cur_instructions.data.get(ip + 3).expect("expected byte") as i64;
                 self.set_ip((ip + 3) as i64);
                 self.push_closure(const_index, num_free)?;
                 2
             }
             Opcode::GetFree => {
-                let free_index = *cur_instructions
-                    .data
-                    .get(ip + 1)
-                    .expect("expected byte") as i64;
+                let free_index = *cur_instructions.data.get(ip + 1).expect("expected byte") as i64;
                 self.set_ip((ip + 1) as i64);
                 let var = self
                     .current_frame()
@@ -1792,7 +1774,7 @@ mod tests {
             },
             // VMTestCase {
             //    expected_cycles:90,
-            //     expected_top: Some(Object::Int(3)),
+            //     expected_top: Some(Object::Number(3.0)),
             //     input: "let one = fn() { 1; }; let two = fn() {2}; one() + two();".to_string(),
             // },
         ];
@@ -1946,7 +1928,6 @@ mod tests {
         run_vm_test(tests);
     }
 
-    #[ignore]
     #[test]
     fn test_function_calls_with_bindings() {
         let tests: Vec<VMTestCase> = vec![
@@ -1992,6 +1973,150 @@ mod tests {
             "#
                 .to_string(),
             },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_function_calls_with_args_and_bindings() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(4.0)),
+                input: r#"
+            identity <- fn(a) { a };
+            identity(4);
+            "#
+                .to_string(),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(3.0)),
+                input: r#"
+          sum <- fn(a,b) { a+b };
+          sum(1,2);
+          "#
+                .to_string(),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(3.0)),
+                input: r#"
+          sum <- fn(a,b) { c <- a+b; c };
+          sum(1,2);
+          "#
+                .to_string(),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(10.0)),
+                input: r#"
+          sum <- fn(a,b) { c <- a+b; c };
+          sum(1,2) + sum(3,4);
+          "#
+                .to_string(),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(10.0)),
+                input: r#"
+          sum <- fn(a,b) { c <- a+b; c };
+          outer <- fn() {sum(1,2) + sum(3,4)};
+          outer();
+          "#
+                .to_string(),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(50.0)),
+                input: r#"
+          global <- 10;
+          sum <- fn(a,b) {
+              c <- a + b;
+              c + global;
+          };
+          outer <- fn() {
+              sum(1,2) + sum(3,4) + global;
+          };
+          outer() + global;
+          "#
+                .to_string(),
+            },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    // This fails correctly, but our test checker bombs
+    #[ignore]
+    #[test]
+    fn test_function_calls_with_wrong_args() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Error(
+                    "wrong number of arguments: want 0 but got 1".to_string(),
+                )),
+                input: r#"
+            fn() { 1; }(1);
+            "#
+                .to_string(),
+            },
+            // VMTestCase {
+            //     expected_top: Some(Object::Error(
+            //         "wrong number of arguments: want 1 but got 0".to_string(),
+            //     )),
+            //     input: r#"
+            //   fn(a){a}();
+            //   "#
+            //     .to_string(),
+            // },
+            //     VMTestCase {
+            //         expected_top: Some(Object::Error(
+            //             "wrong number of arguments: want 2 but got 1".to_string(),
+            //         )),
+            //         input: r#"
+            //   fn(a,b){a+b}(1);
+            //   "#
+            //         .to_string(),
+            //     },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_first_class_function_calls() {
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(1.0)),
+                input: r#"
+                retOneRetter <- fn() { retOne <- fn() {1;}; retOne };
+                retOneRetter()();
+                "#
+                .to_string(),
+            },
+            // VMTestCase {
+            //     expected_top: Some(Object::Int(150)),
+            //     input: r#"
+            //   let foo = fn() { let foo = 50; foo };
+            //   let alsoFoo = fn() { let foo = 100; foo };
+            //   foo() + alsoFoo();
+            //   "#
+            //     .to_string(),
+            // },
+            // VMTestCase {
+            //     expected_top: Some(Object::Int(97)),
+            //     input: r#"
+            // let global = 50;
+            // let minusOne = fn() { let foo = 1; global - foo };
+            // let minusTwo = fn() { let foo = 2; global - foo };
+            // minusOne() + minusTwo();
+            // "#
+            //     .to_string(),
+            // },
         ];
 
         run_vm_test(tests);

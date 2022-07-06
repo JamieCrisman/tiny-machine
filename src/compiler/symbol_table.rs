@@ -125,10 +125,16 @@ impl SymbolTable {
     }
 
     pub fn define(&mut self, name: &str) -> Symbol {
-        // TODO: this causes problems with variable shadowing
         // check if it already exists before defining it
-        if let Some(symbol) = self.resolve(name.to_string()) {
-            return symbol;
+        // but only if it's in the same scope,
+        // otherwise we're defining a new variable
+        if let Some(symbol) = self.resolve_same_scope(name.to_string()) {
+            match (symbol.clone().scope, self.outer.as_ref()) {
+                (SymbolScope::Global, None) => return symbol,
+                (SymbolScope::Local, Some(_)) => return symbol,
+                (_, Some(_)) => {}
+                (_, _) => {}
+            }
         }
 
         let scope = match self.outer {
@@ -146,6 +152,10 @@ impl SymbolTable {
         result
     }
 
+    fn resolve_same_scope(&self, name: String) -> Option<Symbol> {
+        self.store.get(&name).cloned()
+    }
+
     pub fn resolve(&mut self, name: String) -> Option<Symbol> {
         let res = match self.store.get(&name) {
             Some(value) => return Some(value.clone()),
@@ -157,8 +167,8 @@ impl SymbolTable {
 
         match res {
             Some(a) => match a.scope {
-                // SymbolScope::BuiltIn | SymbolScope::Global => Some(a),
-                SymbolScope::Global => Some(a),
+                SymbolScope::BuiltIn | SymbolScope::Global => Some(a),
+                // SymbolScope::Global => Some(a),
                 _ => Some(self.define_free(a)),
             },
             None => None,
