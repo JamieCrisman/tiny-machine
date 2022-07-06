@@ -23,7 +23,7 @@ use crate::{
 };
 
 use self::envir::Envir;
-use self::{builtin::BuiltInFunction, symbol_table::SymbolTable};
+use self::symbol_table::SymbolTable;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Instructions {
@@ -74,7 +74,7 @@ impl Compiler {
     pub fn new() -> Self {
         Self {
             constants: Objects::new(),
-            symbol_table: SymbolTable::new(),
+            symbol_table: SymbolTable::new_with_builtins(),
             scope_index: 0,
             scopes: vec![CompilationScope {
                 instructions: vec![],
@@ -260,11 +260,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_prefix(
-        &mut self,
-        prefix: crate::parser::ast::Prefix,
-        exp: Expression,
-    ) -> Result<(), CompileError> {
+    fn compile_prefix(&mut self, prefix: Prefix, exp: Expression) -> Result<(), CompileError> {
         self.compile_expression(exp)?;
         match prefix {
             Prefix::Bang => self.emit(Opcode::Bang, None),
@@ -757,6 +753,8 @@ impl From<TokenType> for SymbolType {
     }
 }
 
+pub type BuiltInFunc = fn(Vec<Object>) -> Object;
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Object {
     Number(f64),
@@ -766,10 +764,10 @@ pub enum Object {
     Array(Vec<Object>),
     // Hash(HashMap<Object, Object>),
     Func(Vec<Identifier>, BlockStatement, Rc<RefCell<Envir>>, String),
-    Builtin(i32, BuiltInFunction),
+    Builtin(i32, BuiltInFunc),
     Null,
     ReturnValue(Box<Object>),
-    // Error(String),
+    Error(String),
     CompiledFunction {
         instructions: Instructions,
         num_locals: i32,
@@ -794,7 +792,7 @@ impl Object {
             Object::Builtin(_, _) => ObjectType::Builtin,
             Object::Null => ObjectType::Null,
             Object::ReturnValue(_) => ObjectType::ReturnValue,
-            // Object::Error(_) => ObjectType::Error,
+            Object::Error(_) => ObjectType::Error,
             Object::CompiledFunction {
                 instructions: _,
                 num_locals: _,
@@ -816,7 +814,7 @@ pub enum ObjectType {
     Builtin,
     Null,
     ReturnValue,
-    // Error,
+    Error,
     CompiledFunction,
     Closure,
     Symbol,
@@ -835,7 +833,7 @@ impl fmt::Display for ObjectType {
             Builtin => "Builtin".to_string(),
             Null => "Null".to_string(),
             ReturnValue => "ReturnValue".to_string(),
-            // Error => "Error".to_string(),
+            Error => "Error".to_string(),
             CompiledFunction => "CompiledFunction".to_string(),
             Closure => "Closure".to_string(),
             Symbol => "Symbol".to_string(),
@@ -887,7 +885,7 @@ impl fmt::Display for Object {
             Object::Builtin(_, _) => write!(f, "[builtin function]"),
             Object::Null => write!(f, "null"),
             Object::ReturnValue(ref value) => write!(f, "{}", value),
-            // Object::Error(ref value) => write!(f, "{}", value),
+            Object::Error(ref value) => write!(f, "{}", value),
             Object::Closure { Fn: _, Free: _ } => write!(f, "Closure"),
             Object::CompiledFunction {
                 instructions: _,

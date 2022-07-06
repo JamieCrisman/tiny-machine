@@ -3,6 +3,8 @@
 use std::borrow::BorrowMut;
 use std::collections::hash_map::{Iter, IterMut};
 use std::collections::HashMap;
+
+use super::builtin::new_builtins;
 //use std::ops::{DerefMut, Deref};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,19 +46,19 @@ pub struct SymbolTable {
 // }
 
 impl SymbolTable {
-    // pub fn new_with_builtins() -> Self {
-    //     let mut result = Self {
-    //         store: HashMap::new(),
-    //         num_definitions: 0,
-    //         outer: None,
-    //         free_symbols: vec![],
-    //     };
-    //     for (ind, b) in new_builtins().iter().enumerate() {
-    //         result.define_builtin(ind, b.name.clone());
-    //     }
+    pub fn new_with_builtins() -> Self {
+        let mut result = Self {
+            store: HashMap::new(),
+            num_definitions: 0,
+            outer: None,
+            free_symbols: vec![],
+        };
+        for (ind, b) in new_builtins().iter().enumerate() {
+            result.define_builtin(ind, b.name.clone());
+        }
 
-    //     result
-    // }
+        result
+    }
     pub fn new() -> Self {
         Self {
             store: HashMap::new(),
@@ -91,15 +93,15 @@ impl SymbolTable {
         self.store.get(name)
     }
 
-    // pub fn define_builtin(&mut self, index: usize, name: String) -> Symbol {
-    //     let result = Symbol {
-    //         name: String::from(name),
-    //         index,
-    //         scope: SymbolScope::BuiltIn,
-    //     };
-    //     self.store.insert(result.name.clone(), result.clone());
-    //     result
-    // }
+    pub fn define_builtin(&mut self, index: usize, name: String) -> Symbol {
+        let result = Symbol {
+            name,
+            index,
+            scope: SymbolScope::BuiltIn,
+        };
+        self.store.insert(result.name.clone(), result.clone());
+        result
+    }
 
     pub fn define_function(&mut self, name: String) -> Symbol {
         let result = Symbol {
@@ -123,6 +125,7 @@ impl SymbolTable {
     }
 
     pub fn define(&mut self, name: &str) -> Symbol {
+        // TODO: this causes problems with variable shadowing
         // check if it already exists before defining it
         if let Some(symbol) = self.resolve(name.to_string()) {
             return symbol;
