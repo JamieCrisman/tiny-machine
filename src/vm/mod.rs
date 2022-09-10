@@ -152,6 +152,7 @@ impl VM {
             //     sp,
             // );
             self.halted = true;
+            // println!("last: {:?}", self.last_popped());
             return Ok(1);
         }
         let start_time = Instant::now();
@@ -827,10 +828,10 @@ impl VM {
         // } else if left.object_type() == ObjectType::Hash {
         // return self.execute_hash_index(left, index);
         } else {
-            return Err(VMError::Reason(format!(
+            Err(VMError::Reason(format!(
                 "index operator not supported for {:?}",
                 left.object_type()
-            )));
+            )))
         }
     }
 
@@ -861,12 +862,10 @@ impl VM {
                         .clone(),
                 );
             }
-            _ => {
-                return Err(VMError::Reason(format!(
-                    "expected array type, but got {:?}",
-                    left.object_type()
-                )))
-            }
+            _ => Err(VMError::Reason(format!(
+                "expected array type, but got {:?}",
+                left.object_type()
+            ))),
         }
     }
 
@@ -1801,6 +1800,21 @@ mod tests {
                 .to_string(),
             },
             VMTestCase {
+                expected_cycles: 140,
+                expected_top: Some(Object::Number(0.0)),
+                input: r#"
+                countDown <- fn(x) {
+                    if (x = 0) {
+                        return 0;
+                    } else {
+                        countDown(x - 1);
+                    }
+                };
+                countDown(5);
+                "#
+                .to_string(),
+            },
+            VMTestCase {
                 expected_cycles: 90,
                 expected_top: Some(Object::Number(0.0)),
                 input: r#"
@@ -2081,6 +2095,65 @@ mod tests {
             //   "#
             //         .to_string(),
             //     },
+        ];
+
+        run_vm_test(tests);
+    }
+
+    #[test]
+    fn test_fib() {
+        let fib = r#"
+me <- fn(n) {
+    a <- n
+    if (n > 1) {
+        a <- me(n-1) + me(n-2)
+        a
+    }
+    a
+}
+"#;
+        let tests: Vec<VMTestCase> = vec![
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(1.0)),
+                input: format!("{}\nme(1)", fib),
+            },
+            VMTestCase {
+                expected_cycles: 90,
+                expected_top: Some(Object::Number(1.0)),
+                input: format!("{}\nme(2)", fib),
+            },
+            VMTestCase {
+                // no idea what the cycles are
+                expected_cycles: 550,
+                expected_top: Some(Object::Number(5.0)),
+                input: format!("{}\nme(5)", fib),
+            },
+            VMTestCase {
+                // no idea what the cycles are
+                expected_cycles: 2550,
+                expected_top: Some(Object::Number(21.0)),
+                input: format!("{}\nme(8)", fib),
+            },
+            // VMTestCase {
+            //     expected_top: Some(Object::Int(150)),
+            //     input: r#"
+            //   let foo = fn() { let foo = 50; foo };
+            //   let alsoFoo = fn() { let foo = 100; foo };
+            //   foo() + alsoFoo();
+            //   "#
+            //     .to_string(),
+            // },
+            // VMTestCase {
+            //     expected_top: Some(Object::Int(97)),
+            //     input: r#"
+            // let global = 50;
+            // let minusOne = fn() { let foo = 1; global - foo };
+            // let minusTwo = fn() { let foo = 2; global - foo };
+            // minusOne() + minusTwo();
+            // "#
+            //     .to_string(),
+            // },
         ];
 
         run_vm_test(tests);

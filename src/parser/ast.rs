@@ -2,7 +2,7 @@ use crate::parser::token::TokenType as TT;
 
 use std::fmt;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Identifier(pub String);
 
 impl From<TT> for Identifier {
@@ -124,7 +124,7 @@ impl fmt::Display for Expression {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Prefix {
     // Tally,
     Minus,
@@ -141,7 +141,7 @@ impl fmt::Display for Prefix {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PostfixModifier {
     Reduce,
 }
@@ -170,7 +170,7 @@ impl fmt::Display for Postfix {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Infix {
     // Modifier(InfixModifier, Box<Infix>),
     // Unknown,
@@ -277,7 +277,7 @@ pub fn precedence_of(t: TT) -> Precedence {
     }
 }
 
-#[derive(PartialEq, PartialOrd, Debug, Clone)]
+#[derive(PartialEq, Eq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     Lowest,
     Equals,      // ==

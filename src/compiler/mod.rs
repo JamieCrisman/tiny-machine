@@ -25,7 +25,7 @@ use crate::{
 use self::envir::Envir;
 use self::symbol_table::SymbolTable;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Instructions {
     pub data: Vec<u8>,
 }
@@ -716,7 +716,7 @@ impl DerefMut for Objects {
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(PartialEq, Clone, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum SymbolType {
     UNKNOWN,
     PLUS,
@@ -803,7 +803,7 @@ impl Object {
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum ObjectType {
     Number,
     // String,

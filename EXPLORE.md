@@ -8,7 +8,7 @@ Because I find it interesting. Integrating Lua or some other language would prob
 
 > Implemented
 
-There's a few things I really admire from the [APL](https://en.wikipedia.org/wiki/APL_(programming_language)) family of langauges. In a way, Iverson's original notation that he developed was a form of refactoring of mathematics. One aspect was that there were a lot of ambiguous rules for order of evaluation. I wanted to play with that idea as well. So, classic mathematical precedence (like PEMDAS) has been tossed out the window. Things just simply evaluate left to right.
+There's a few things I really admire from the [APL](<https://en.wikipedia.org/wiki/APL_(programming_language)>) family of langauges. In a way, Iverson's original notation that he developed was a form of refactoring of mathematics. One aspect was that there were a lot of ambiguous rules for order of evaluation. I wanted to play with that idea as well. So, classic mathematical precedence (like PEMDAS) has been tossed out the window. Things just simply evaluate left to right.
 
 ```
 i <- 10 - 2 / 2 + 5
@@ -52,8 +52,7 @@ APL's reduce is about where my mind exploded on how wonderful a notation can be 
 // [0.25, 0.4, 0.5]
 ```
 
-Functions aren't implemented yet, but would be nice to be able to reduce with functions as well. Need to explore how that would work.
-
+Functions Reductions aren't implemented (yet?), but would be nice to be able to reduce with functions as well. Need to explore how that would work.
 
 # Problems
 

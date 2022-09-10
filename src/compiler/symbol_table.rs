@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use super::builtin::new_builtins;
 //use std::ops::{DerefMut, Deref};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolScope {
     Global,
     Local,
@@ -16,7 +16,7 @@ pub enum SymbolScope {
     Function,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Symbol {
     pub name: String,
     pub scope: SymbolScope,
