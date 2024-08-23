@@ -29,7 +29,7 @@ const CLOCK_MODIFIER: u64 = 4;
 const CLOCK_SPEED: u64 = 4194304 * CLOCK_MODIFIER;
 const FRAME_RATE: u64 = 60;
 const CYCLES_PER_FRAME: u64 = CLOCK_SPEED / FRAME_RATE;
-const TIME_STEP: Duration = Duration::from_nanos(1_000_000_000 / FRAME_RATE as u64);
+const TIME_STEP: Duration = Duration::from_nanos(1_000_000_000 / FRAME_RATE);
 
 // CELESTE
 // const WIDTH: i32 = 320;

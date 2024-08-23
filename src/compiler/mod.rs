@@ -2,13 +2,10 @@ pub mod builtin;
 pub mod envir;
 pub mod symbol_table;
 
-use core::cell::RefCell;
-use std::rc::Rc;
 use std::{
     borrow::BorrowMut,
     fmt::{self, Display},
     ops::{Deref, DerefMut},
-    vec::Drain,
 };
 
 use crate::{
@@ -22,7 +19,6 @@ use crate::{
     },
 };
 
-use self::envir::Envir;
 use self::symbol_table::SymbolTable;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,25 +82,21 @@ impl Compiler {
 
     pub fn read(&mut self, program: Program) -> Result<(), CompileError> {
         for s in program {
-            if let Err(e) = self.compile_statement(s) {
-                return Err(e);
-            }
+            self.compile_statement(s)?;
         }
         Ok(())
     }
 
     pub fn compile(&mut self, program: Vec<Statement>) -> Result<(), CompileError> {
         for s in program {
-            if let Err(e) = self.compile_statement(s) {
-                return Err(e);
-            }
+            self.compile_statement(s)?;
         }
         Ok(())
     }
 
     fn compile_statement(&mut self, statement: Statement) -> Result<(), CompileError> {
         match statement {
-            Statement::Blank => Ok(()),
+            // Statement::Blank => Ok(()),
             Statement::Expression(e) => {
                 self.compile_expression(e)?;
                 self.emit(Opcode::Pop, None);
@@ -137,7 +129,7 @@ impl Compiler {
 
     fn compile_expression(&mut self, exp: Expression) -> Result<(), CompileError> {
         match exp {
-            Expression::Blank => Ok(()),
+            // Expression::Blank => Ok(()),
             Expression::Identifier(ident) => {
                 let symbol = match self.symbol_table.resolve(ident.0.clone()) {
                     None => {
@@ -163,7 +155,7 @@ impl Compiler {
                 };
                 Ok(())
             }
-            Expression::Infix(i, exp_a, exp_b) => self.compile_infix(i, exp_a, *exp_b),
+            Expression::Infix(i, exp_a, exp_b) => self.compile_infix(i, *exp_a, *exp_b),
             Expression::Prefix(p, exp) => self.compile_prefix(p, *exp),
             Expression::Literal(literal) => self.compile_literal(literal),
             Expression::Postfix(p, exp) => self.compile_postfix(p, *exp),
@@ -171,7 +163,7 @@ impl Compiler {
                 condition,
                 consequence,
                 alternative,
-            } => self.compile_if(condition, consequence, alternative),
+            } => self.compile_if(*condition, consequence, alternative),
             //Expression::While {
             //     condition,
             //     body,
@@ -179,7 +171,7 @@ impl Compiler {
             Expression::Index(expr, ind_expr) => self.compile_index(*expr, *ind_expr),
             Expression::Piset { params } => self.compile_piset(params),
             Expression::Func { params, body, name } => self.compile_function(params, body, name),
-            Expression::Call { args, func } => self.compile_call(args, func),
+            Expression::Call { args, func } => self.compile_call(args, *func),
             //Expression::Call { args: _, func: _ } => {
             //  Err(CompileError::Reason("Not Implemented".to_string()))
             //} // _ => Err(CompileError::Reason("Not Implemented".to_string())),
@@ -189,9 +181,9 @@ impl Compiler {
     fn compile_call(
         &mut self,
         args: Vec<Expression>,
-        func: Box<Expression>,
+        func: Expression,
     ) -> Result<(), CompileError> {
-        self.compile_expression(*func)?;
+        self.compile_expression(func)?;
         let len = args.len() as i32;
         for a in args {
             self.compile_expression(a)?;
@@ -203,7 +195,7 @@ impl Compiler {
     fn compile_infix(
         &mut self,
         infix: Infix,
-        exp_a: Box<Expression>,
+        exp_a: Expression,
         exp_b: Expression,
     ) -> Result<(), CompileError> {
         // if infix == Infix::Lt {
@@ -212,9 +204,7 @@ impl Compiler {
         //     self.emit(Opcode::GreaterThan, None);
         //     return Ok(());
         // }
-        if let Err(e) = self.compile_expression(*exp_a) {
-            return Err(e);
-        }
+        self.compile_expression(exp_a)?;
 
         // if let Err(e) = self.compile_expression(*exp_a) {
         //     return Err(e);
@@ -222,13 +212,7 @@ impl Compiler {
 
         let _is_monadic = false;
 
-        match exp_b {
-            other_expression => {
-                if let Err(e) = self.compile_expression(other_expression) {
-                    return Err(e);
-                }
-            }
-        };
+        self.compile_expression(exp_b)?;
 
         match infix {
             Infix::Plus => self.emit(Opcode::Add, None),
@@ -303,7 +287,7 @@ impl Compiler {
         self.emit(Opcode::Jump, Some(vec![condition_start]));
 
         let after_body_pos = self.scope_to_byte_position();
-        self.change_operand(jump_not_truthy_pos, Some(vec![after_body_pos as i32]));
+        self.change_operand(jump_not_truthy_pos, Some(vec![after_body_pos]));
         // emit pop?
         // self.emit(Opcode::Pop, None); // TODO:???
         //
@@ -313,11 +297,11 @@ impl Compiler {
 
     fn compile_if(
         &mut self,
-        condition: Box<Expression>,
+        condition: Expression,
         consequence: BlockStatement,
         alternative: Option<BlockStatement>,
     ) -> Result<(), CompileError> {
-        self.compile_expression(*condition)?;
+        self.compile_expression(condition)?;
         // this gets properly set later (back patching)
         let jump_not_truthy_pos = self.emit(Opcode::JumpNotTruthy, Some(vec![9999]));
         self.compile(consequence)?;
@@ -329,10 +313,7 @@ impl Compiler {
         let jump_pos = self.emit(Opcode::Jump, Some(vec![9999]));
         //let after_consequence_pos = self.scopes[self.scope_index].instructions.len();
         let after_consequence_pos = self.scope_to_byte_position();
-        self.change_operand(
-            jump_not_truthy_pos,
-            Some(vec![after_consequence_pos as i32]),
-        );
+        self.change_operand(jump_not_truthy_pos, Some(vec![after_consequence_pos]));
 
         if let Some(else_stmt) = alternative {
             self.compile(else_stmt)?;
@@ -349,7 +330,7 @@ impl Compiler {
         }
         // let after_alternative_pos = self.scopes[self.scope_index].instructions.len();
         let after_alternative_pos = self.scope_to_byte_position();
-        self.change_operand(jump_pos, Some(vec![after_alternative_pos as i32]));
+        self.change_operand(jump_pos, Some(vec![after_alternative_pos]));
 
         Ok(())
     }
@@ -676,9 +657,9 @@ impl Objects {
         self.0.push(obj)
     }
 
-    pub fn pop(&mut self) -> Option<Object> {
-        self.0.pop()
-    }
+    // pub fn pop(&mut self) -> Option<Object> {
+    //     self.0.pop()
+    // }
 
     pub fn insert(&mut self, idx: usize, element: Object) {
         self.0.insert(idx, element)
@@ -692,10 +673,10 @@ impl Objects {
         self.0.capacity()
     }
 
-    pub fn drain<'a>(&'a mut self) -> Drain<'a, Object> {
-        let len = self.0.len();
-        self.0.drain(..len)
-    }
+    // pub fn drain<'a>(&'a mut self) -> Drain<'a, Object> {
+    //     let len = self.0.len();
+    //     self.0.drain(..len)
+    // }
 }
 
 // Impl Deref and DerefMut will automatically provide us with
@@ -763,10 +744,10 @@ pub enum Object {
     // Bool(bool),
     Array(Vec<Object>),
     // Hash(HashMap<Object, Object>),
-    Func(Vec<Identifier>, BlockStatement, Rc<RefCell<Envir>>, String),
+    // Func(Vec<Identifier>, BlockStatement, Rc<RefCell<Envir>>, String),
     Builtin(i32, BuiltInFunc),
     Null,
-    ReturnValue(Box<Object>),
+    // ReturnValue(Box<Object>),
     Error(String),
     CompiledFunction {
         instructions: Instructions,
@@ -774,8 +755,8 @@ pub enum Object {
         num_parameters: i32,
     },
     Closure {
-        Fn: Box<Object>, // technically specifically ObjectCompiledFunction
-        Free: Vec<Object>,
+        r#fn: Box<Object>, // technically specifically ObjectCompiledFunction
+        free: Vec<Object>,
     },
 }
 
@@ -788,17 +769,17 @@ impl Object {
             // Object::Bool(_) => ObjectType::Bool,
             Object::Array(_) => ObjectType::Array,
             // Object::Hash(_) => ObjectType::Hash,
-            Object::Func(_, _, _, _) => ObjectType::Func,
+            // Object::Func(_, _, _, _) => ObjectType::Func,
             Object::Builtin(_, _) => ObjectType::Builtin,
             Object::Null => ObjectType::Null,
-            Object::ReturnValue(_) => ObjectType::ReturnValue,
+            // Object::ReturnValue(_) => ObjectType::ReturnValue,
             Object::Error(_) => ObjectType::Error,
             Object::CompiledFunction {
                 instructions: _,
                 num_locals: _,
                 num_parameters: _,
             } => ObjectType::CompiledFunction,
-            Object::Closure { Fn: _, Free: _ } => ObjectType::Closure,
+            Object::Closure { r#fn: _, free: _ } => ObjectType::Closure,
         }
     }
 }
@@ -871,22 +852,22 @@ impl fmt::Display for Object {
             //     }
             //     write!(f, "{{{}}}", result)
             // }
-            Object::Func(ref params, _, _, _) => {
-                let mut result = String::new();
-                for (i, Identifier(ref s)) in params.iter().enumerate() {
-                    if i < 1 {
-                        result.push_str(s);
-                    } else {
-                        result.push_str(&format!(", {}", s));
-                    }
-                }
-                write!(f, "func({}) {{ ... }}", result)
-            }
+            // Object::Func(ref params, _, _, _) => {
+            //     let mut result = String::new();
+            //     for (i, Identifier(ref s)) in params.iter().enumerate() {
+            //         if i < 1 {
+            //             result.push_str(s);
+            //         } else {
+            //             result.push_str(&format!(", {}", s));
+            //         }
+            //     }
+            //     write!(f, "func({}) {{ ... }}", result)
+            // }
             Object::Builtin(_, _) => write!(f, "[builtin function]"),
             Object::Null => write!(f, "null"),
-            Object::ReturnValue(ref value) => write!(f, "{}", value),
+            // Object::ReturnValue(ref value) => write!(f, "{}", value),
             Object::Error(ref value) => write!(f, "{}", value),
-            Object::Closure { Fn: _, Free: _ } => write!(f, "Closure"),
+            Object::Closure { r#fn: _, free: _ } => write!(f, "Closure"),
             Object::CompiledFunction {
                 instructions: _,
                 num_locals,

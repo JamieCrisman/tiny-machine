@@ -134,7 +134,7 @@ impl VM {
     }
 
     fn set_ip(&mut self, new_ip: i64) {
-        self.frames[(self.frames_index - 1) as usize].ip = new_ip;
+        self.frames[self.frames_index - 1].ip = new_ip;
     }
 
     pub fn execute(&mut self) -> Result<u8, VMError> {
@@ -157,7 +157,7 @@ impl VM {
         }
         let start_time = Instant::now();
         let init_ip = self.current_frame().ip;
-        self.set_ip((init_ip + 1) as i64);
+        self.set_ip(init_ip + 1);
         let ip = self.current_frame().ip as usize;
         // let instr = self.current_frame().instructions().unwrap();
         // println!("cur ip {} instr: {:?}", ip, instr);
@@ -259,10 +259,12 @@ impl VM {
                 let global_index = u16::from_be_bytes(buff) as usize;
                 self.set_ip((ip + 2) as i64);
                 let pop = self.pop();
-                if global_index == self.globals.len() {
-                    self.globals.insert(global_index, pop);
-                } else if global_index < self.globals.len() {
-                    self.globals[global_index] = pop;
+                match global_index.cmp(&self.globals.len()) {
+                    std::cmp::Ordering::Less => self.globals[global_index] = pop,
+                    std::cmp::Ordering::Equal => self.globals.insert(global_index, pop),
+                    std::cmp::Ordering::Greater => {
+                        unreachable!("should not be addressing above known globals")
+                    }
                 }
                 2
             }
@@ -420,12 +422,12 @@ impl VM {
             Opcode::CurrentClosure => {
                 let cur_frame = self.current_frame();
                 let obj = Object::Closure {
-                    Fn: Box::new(Object::CompiledFunction {
+                    r#fn: Box::new(Object::CompiledFunction {
                         instructions: cur_frame.instructions(),
                         num_locals: cur_frame.num_locals,
                         num_parameters: cur_frame.num_args as i32,
                     }),
-                    Free: cur_frame.free.clone(),
+                    free: cur_frame.free.clone(),
                 };
                 self.push(obj)?;
                 2
@@ -476,8 +478,8 @@ impl VM {
             free.push(self.stack[(self.sp - num_free as usize) + (i as usize)].clone());
         }
         let cl = Object::Closure {
-            Fn: Box::new(function.to_owned()),
-            Free: free,
+            r#fn: Box::new(function.to_owned()),
+            free: free,
         };
         self.sp -= num_free as usize;
         self.push(cl)?;
@@ -509,8 +511,8 @@ impl VM {
                 }
                 self.execute_builtin(builtin_func, args)?;
             }
-            Object::Closure { Fn, Free } => {
-                let (instructions, num_locals, num_parameters) = match *Fn {
+            Object::Closure { r#fn, free } => {
+                let (instructions, num_locals, num_parameters) = match *r#fn {
                     Object::CompiledFunction {
                         instructions,
                         num_locals,
@@ -530,7 +532,7 @@ impl VM {
                         num_parameters, args,
                     )));
                 }
-                self.execute_closure(num_parameters as i64, instructions, num_locals, Free)?;
+                self.execute_closure(num_parameters as i64, instructions, num_locals, free)?;
             }
             something_else => {
                 return Err(VMError::Reason(format!(
@@ -998,7 +1000,7 @@ impl VM {
     pub fn update_screen(&mut self, screen: &mut [u8]) {
         for (i, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let val = unsafe { self.screen.get_unchecked(i) };
-            let palette = (val >> 4) as u8 % self.palettes.len() as u8;
+            let palette = (val >> 4) % self.palettes.len() as u8;
             let color = (val & 0b0000_1111) % self.palettes[palette as usize].colors.len() as u8;
             // println!("palette: {} color: {} val: {}", palette, color, val);
             pixel.copy_from_slice(&self.palettes[palette as usize].colors[color as usize]);
@@ -1036,6 +1038,7 @@ impl VM {
             .collect()
     }
 
+    #[cfg(test)]
     fn last_popped(&self) -> Option<Object> {
         self.last_popped.clone()
     }

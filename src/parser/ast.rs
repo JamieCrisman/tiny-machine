@@ -16,7 +16,7 @@ impl From<TT> for Identifier {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Blank,
+    // Blank,
     Let(Identifier, Expression),
     Return(Expression),
     Expression(Expression),
@@ -27,7 +27,7 @@ pub enum Statement {
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Blank => write!(f, ""),
+            // Self::Blank => write!(f, ""),
             Self::Let(i, e) => write!(f, "{} <- {};", i.0, e),
             Self::Return(e) => write!(f, "return {};", e),
             Self::Expression(e) => write!(f, "{}", e),
@@ -39,7 +39,7 @@ impl fmt::Display for Statement {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    Blank,
+    // Blank,
     Identifier(Identifier),
     Literal(Literal),
     Postfix(Postfix, Box<Expression>),
@@ -73,7 +73,7 @@ pub enum Expression {
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Blank => write!(f, ""),
+            // Self::Blank => write!(f, ""),
             Self::Identifier(i) => write!(f, "{}", i.0),
             Self::Literal(l) => write!(f, "{}", l),
             Self::Prefix(p, e) => {
@@ -280,11 +280,11 @@ pub fn precedence_of(t: TT) -> Precedence {
 #[derive(PartialEq, Eq, PartialOrd, Debug, Clone)]
 pub enum Precedence {
     Lowest,
-    Equals,      // ==
-    LessGreater, // > or <
-    Sum,         // +
-    Product,     // *
-    Prefix,      // -X or !X
-    Call,        // myFunction(x)
-    Index,       // Index,       // array[index]
+    // Equals,      // ==
+    // LessGreater, // > or <
+    Sum,     // +
+    Product, // *
+    Prefix,  // -X or !X
+    Call,    // myFunction(x)
+    Index,   // Index,       // array[index]
 }

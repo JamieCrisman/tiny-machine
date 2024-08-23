@@ -487,30 +487,30 @@ impl Parser {
         }
     }
 
-    fn consume_infix_modifiers(&mut self) -> Option<Infix> {
-        match self.peek_token_type {
-            TokenType::PLUS
-            | TokenType::MINUS
-            | TokenType::ASTERISK
-            | TokenType::SLASH
-            // | TokenType::FIRSTPICK
-            // | TokenType::MAGMOD
-            // | TokenType::WITHOUT
-             => {
-                self.next_token();
-                Some(
-                    Parser::token_to_infix(self.cur_token_type.clone())
-                        .expect("saw a token, but ended up getting none on infix conversion"),
-                )
-            }
-            // TokenType::SWAP => {
-            //     self.next_token();
-            //     self.consume_infix_modifiers()
-            //         .map(|infix| Infix::Modifier(InfixModifier::Swap, Box::new(infix)))
-            // }
-            _ => None,
-        }
-    }
+    // fn consume_infix_modifiers(&mut self) -> Option<Infix> {
+    //     match self.peek_token_type {
+    //         TokenType::PLUS
+    //         | TokenType::MINUS
+    //         | TokenType::ASTERISK
+    //         | TokenType::SLASH
+    //         // | TokenType::FIRSTPICK
+    //         // | TokenType::MAGMOD
+    //         // | TokenType::WITHOUT
+    //          => {
+    //             self.next_token();
+    //             Some(
+    //                 Parser::token_to_infix(self.cur_token_type.clone())
+    //                     .expect("saw a token, but ended up getting none on infix conversion"),
+    //             )
+    //         }
+    //         // TokenType::SWAP => {
+    //         //     self.next_token();
+    //         //     self.consume_infix_modifiers()
+    //         //         .map(|infix| Infix::Modifier(InfixModifier::Swap, Box::new(infix)))
+    //         // }
+    //         _ => None,
+    //     }
+    // }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
         let infix = match self.cur_token_type {
@@ -530,7 +530,7 @@ impl Parser {
             | TokenType::LESSTHANEQUAL
             | TokenType::GREATERTHAN
             | TokenType::GREATERTHANEQUAL
-            // | TokenType::WITHOUT 
+            // | TokenType::WITHOUT
             => match Parser::token_to_infix(self.cur_token_type.clone()) {
                 Some(infix) => infix,
                 None => return None,

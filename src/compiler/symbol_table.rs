@@ -59,6 +59,8 @@ impl SymbolTable {
 
         result
     }
+
+    #[cfg(test)]
     pub fn new() -> Self {
         Self {
             store: HashMap::new(),
@@ -77,21 +79,21 @@ impl SymbolTable {
         }
     }
 
-    pub fn store_len(&self) -> usize {
-        self.store.len()
-    }
-
-    pub fn store_iter<'a>(&'a self) -> Iter<'a, String, Symbol> {
-        self.store.iter()
-    }
-
-    pub fn store_iter_mut<'a>(&'a mut self) -> IterMut<'a, String, Symbol> {
-        self.store.iter_mut()
-    }
-
-    pub fn get_from_store(&self, name: &str) -> Option<&Symbol> {
-        self.store.get(name)
-    }
+    // pub fn store_len(&self) -> usize {
+    //     self.store.len()
+    // }
+    //
+    // pub fn store_iter<'a>(&'a self) -> Iter<'a, String, Symbol> {
+    //     self.store.iter()
+    // }
+    //
+    // pub fn store_iter_mut<'a>(&'a mut self) -> IterMut<'a, String, Symbol> {
+    //     self.store.iter_mut()
+    // }
+    //
+    // pub fn get_from_store(&self, name: &str) -> Option<&Symbol> {
+    //     self.store.get(name)
+    // }
 
     pub fn define_builtin(&mut self, index: usize, name: String) -> Symbol {
         let result = Symbol {

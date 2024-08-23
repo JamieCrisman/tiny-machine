@@ -136,7 +136,6 @@ impl Lexer {
                         TT::LESSTHAN
                     }
                 }
-                '≤' => TT::LESSTHANEQUAL,
                 ',' => TT::COMMA,
                 '"' => {
                     return self.read_string(start_col, start_line);
